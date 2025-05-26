@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  mongo:
+    image: mongo:6
+    container_name: mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+
+  # Admin interfaces
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_CONFIG_BASICAUTH_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_CONFIG_BASICAUTH_PASSWORD}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongo
+
+  # user-service:
+  #   build: ./services/user-service
+  #   ports:
+  #     - "4000:4000"
+  #   environment:
+  #     JWT_SECRET: ${JWT_SECRET}
+  #     DB_URL: ${DB_URL}
+  #   depends_on:
+  #     - postgres
+
+  # freelance-service:
+  #   build: ./services/freelance-service
+  #   ports:
+  #     - "4001:4001"
+  #   environment:
+  #     DB_URL: postgres://devuser:devpass@postgres:5432/appdb
+  #     USER_SERVICE_URL: http://user-service:4000/api/auth/validate
+  #   depends_on:
+  #     - postgres
+  #     - user-service
+
+  # event-service:
+  #   build: ./services/event-service
+  #   ports:
+  #     - "4002:4002"
+  #   environment:
+  #     DB_URL: postgres://devuser:devpass@postgres:5432/appdb
+  #   depends_on:
+  #     - postgres
+
+  # chat-service:
+  #   build: ./services/chat-service
+  #   ports:
+  #     - "4003:4003"
+  #   environment:
+  #     MONGO_URL: ${MONGO_URL}/chatdb
+  #   depends_on:
+  #     - mongo
+
+  # notification-service:
+  #   build: ./services/notification-service
+  #   ports:
+  #     - "4004:4004"
+  #   environment:
+  #     MONGO_URL: ${MONGO_URL}/notifications
+  #   depends_on:
+  #     - mongo
+
+volumes:
+  pgdata:
+  mongodata:
