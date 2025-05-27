@@ -18,4 +18,5 @@ export default {
       migrationsDir: "src/migrations",
     },
   },
+  jwt_token_key: process.env.TOKEN_KEY,
 };
