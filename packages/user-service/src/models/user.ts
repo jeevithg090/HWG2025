@@ -1,8 +1,7 @@
-// src/entities/User.ts
-import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
-import { UserRole } from "../types/userRoles";
-import { UserTypes } from "../enums/userRoles";
+import { Column, Entity } from "typeorm";
+import { UserTypes } from "../enums/userTypes";
 import Model from "./base";
+import { UserRoles } from "../enums/userRoles";
 
 @Entity()
 export class User extends Model {
@@ -26,7 +25,10 @@ export class User extends Model {
     enum: UserTypes,
     default: UserTypes.FREELANCER,
   })
-  role!: UserRole;
+  type!: UserTypes;
+
+  @Column({ type: "simple-array", nullable: true, default: [] })
+  roles?: string[];
 
   @Column({ nullable: true })
   bio?: string;
