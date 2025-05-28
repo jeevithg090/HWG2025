@@ -1,0 +1,8 @@
+export enum EventTypes {
+  HACKATHON = "HACKATHON",
+  MEETUP = "MEETUP",
+  WEBINAR = "WEBINAR",
+  CONFERENCE = "CONFERENCE",
+  WORKSHOP = "WORKSHOP",
+  OTHER = "OTHER",
+}
