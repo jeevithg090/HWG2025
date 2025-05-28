@@ -1,4 +1,4 @@
-import { Entity, Column, OneToMany } from "typeorm";
+import { Column, Entity, OneToMany } from "typeorm";
 import { EventTypes } from "../enums/eventTypes";
 import Model from "./base";
 import { EventAttendee } from "./eventAttendee";
@@ -51,6 +51,6 @@ export class Event extends Model {
   @Column("text", { array: true, nullable: true })
   tags?: string[];
 
-  @OneToMany(() => EventAttendee, attendee => attendee.event)
+  @OneToMany(() => EventAttendee, (attendee) => attendee.event)
   attendees?: EventAttendee[];
 }

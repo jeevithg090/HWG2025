@@ -1,10 +1,10 @@
 import { DataSource } from "typeorm";
-import config from "../config/config";
 import {
   addTransactionalDataSource,
   initializeTransactionalContext,
 } from "typeorm-transactional";
 import logger from "../common/logger";
+import config from "../config/config";
 import { Event } from "../models/event";
 import { EventAttendee } from "../models/eventAttendee";
 

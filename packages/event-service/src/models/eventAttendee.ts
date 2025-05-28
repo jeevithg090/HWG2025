@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne } from "typeorm";
 import Model from "./base";
 import { Event } from "./event";
 
@@ -18,11 +18,11 @@ export class EventAttendee extends Model {
 
   @Column({ default: false })
   hasAttended!: boolean;
-  
+
   @Column({ default: "REGISTERED" })
   status!: string; // REGISTERED, CANCELLED, WAITLISTED
 
-  @ManyToOne(() => Event, event => event.attendees)
+  @ManyToOne(() => Event, (event) => event.attendees)
   @JoinColumn({ name: "eventId" })
   event!: Event;
 }

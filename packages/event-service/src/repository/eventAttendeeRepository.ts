@@ -36,36 +36,45 @@ class EventAttendeeRepository {
     await this.initRepository();
     return this.repository.find({
       where: { eventId },
-      order: { createdAt: 'ASC' }
+      order: { createdAt: "ASC" },
     });
   }
 
-  public async findByUserIdAndEventId(userId: string, eventId: string): Promise<EventAttendee | null> {
+  public async findByUserIdAndEventId(
+    userId: string,
+    eventId: string
+  ): Promise<EventAttendee | null> {
     await this.initRepository();
     return this.repository.findOneBy({ userId, eventId });
   }
-  
+
   public async findByUserId(userId: string): Promise<EventAttendee[]> {
     await this.initRepository();
     return this.repository.find({
       where: { userId },
-      relations: ['event'],
-      order: { createdAt: 'DESC' }
+      relations: ["event"],
+      order: { createdAt: "DESC" },
     });
   }
-  
-  public async updateStatus(id: string, status: string): Promise<EventAttendee | null> {
+
+  public async updateStatus(
+    id: string,
+    status: string
+  ): Promise<EventAttendee | null> {
     await this.initRepository();
     await this.repository.update(id, { status });
     return this.findById(id);
   }
-  
-  public async markAttended(id: string, hasAttended: boolean): Promise<EventAttendee | null> {
+
+  public async markAttended(
+    id: string,
+    hasAttended: boolean
+  ): Promise<EventAttendee | null> {
     await this.initRepository();
     await this.repository.update(id, { hasAttended });
     return this.findById(id);
   }
-  
+
   public async deleteById(id: string): Promise<boolean> {
     await this.initRepository();
     const result = await this.repository.delete(id);

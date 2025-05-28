@@ -9,7 +9,7 @@ const responseStatusMap: { [key: string]: number } = {
   REGISTRATION_CANCELLED: 200,
   USER_ID_REQUIRED: 400,
   ATTENDEE_NOT_FOUND: 404,
-  EVENT_DELETED: 200
+  EVENT_DELETED: 200,
 };
 
 export default responseStatusMap;

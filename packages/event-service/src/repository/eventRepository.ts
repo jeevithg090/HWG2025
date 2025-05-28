@@ -31,7 +31,7 @@ class EventRepository {
     await this.initRepository();
     return this.repository.findOne({
       where: { id },
-      relations: ["attendees"]
+      relations: ["attendees"],
     });
   }
 
@@ -44,25 +44,27 @@ class EventRepository {
   }): Promise<[Event[], number]> {
     await this.initRepository();
     const { isActive, eventType, isPublished, skip = 0, take = 10 } = options;
-    
+
     const queryBuilder = this.repository.createQueryBuilder("event");
-    
+
     if (isActive !== undefined) {
       queryBuilder.andWhere("event.isActive = :isActive", { isActive });
     }
-    
+
     if (eventType) {
       queryBuilder.andWhere("event.eventType = :eventType", { eventType });
     }
-    
+
     if (isPublished !== undefined) {
-      queryBuilder.andWhere("event.isPublished = :isPublished", { isPublished });
+      queryBuilder.andWhere("event.isPublished = :isPublished", {
+        isPublished,
+      });
     }
-    
+
     queryBuilder.orderBy("event.startDateTime", "ASC");
     queryBuilder.skip(skip);
     queryBuilder.take(take);
-    
+
     return queryBuilder.getManyAndCount();
   }
 
@@ -70,10 +72,10 @@ class EventRepository {
     await this.initRepository();
     return this.repository.find({
       where: { organizerId },
-      order: { startDateTime: "ASC" }
+      order: { startDateTime: "ASC" },
     });
   }
-  
+
   public async deleteById(id: string): Promise<boolean> {
     await this.initRepository();
     const result = await this.repository.delete(id);

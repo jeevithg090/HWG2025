@@ -70,14 +70,15 @@ services:
       - postgres
       - user-service
 
-  # event-service:
-  #   build: ./packages/event-service
-  #   ports:
-  #     - "4002:4002"
-  #   environment:
-  #     DB_URL: postgres://devuser:devpass@postgres:5432/postgresdb
-  #   depends_on:
-  #     - postgres
+  event-service:
+    build: ./packages/event-service
+    ports:
+      - "4002:4002"
+    environment:
+      USER_SERVICE_URL: http://user-service:4000/auth/validate
+    depends_on:
+      - postgres
+      - user-service
 
   # chat-service:
   #   build: ./packages/chat-service

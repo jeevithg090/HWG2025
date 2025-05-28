@@ -7,9 +7,12 @@ export const CreateEventSchema = z.object({
   startDateTime: z.string().refine((value) => !isNaN(Date.parse(value)), {
     message: "Invalid start date time format",
   }),
-  endDateTime: z.string().refine((value) => !isNaN(Date.parse(value)), {
-    message: "Invalid end date time format",
-  }).optional(),
+  endDateTime: z
+    .string()
+    .refine((value) => !isNaN(Date.parse(value)), {
+      message: "Invalid end date time format",
+    })
+    .optional(),
   venue: z.string().optional(),
   onlineLink: z.string().url().optional(),
   eventType: z.nativeEnum(EventTypes),
