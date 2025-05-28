@@ -1,5 +1,11 @@
 // src/models/proposal.ts
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from "typeorm";
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from "typeorm";
 import Model from "./base";
 import { ProposalStatus } from "../enums/gigStatus";
 import { Gig } from "./gig";
@@ -12,7 +18,7 @@ export class Proposal extends Model {
   @Column("uuid")
   gigId!: string;
 
-  @ManyToOne(() => Gig, gig => gig.proposals)
+  @ManyToOne(() => Gig, (gig) => gig.proposals)
   @JoinColumn({ name: "gigId" })
   gig!: Gig;
 
@@ -25,10 +31,10 @@ export class Proposal extends Model {
   @Column("integer", { nullable: true })
   estimatedTimeInDays?: number;
 
-  @Column({ 
-    type: "enum", 
-    enum: ProposalStatus, 
-    default: ProposalStatus.PENDING
+  @Column({
+    type: "enum",
+    enum: ProposalStatus,
+    default: ProposalStatus.PENDING,
   })
   status!: ProposalStatus;
 

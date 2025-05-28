@@ -1,9 +1,9 @@
-import { UserRole } from "./userRoles";
+import { UserTypes } from "../enums/userTypes";
 
 export type CreateUserInput = {
   name: string;
   email: string;
-  role?: UserRole;
+  type?: UserTypes;
   bio?: string;
   skills?: string[];
   active?: boolean;

@@ -4,7 +4,6 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
-  DeleteDateColumn
 } from "typeorm";
 
 export default abstract class Model {
@@ -16,7 +15,4 @@ export default abstract class Model {
 
   @UpdateDateColumn()
   updatedAt!: Date;
-  
-  @DeleteDateColumn({ nullable: true })
-  deletedAt?: Date;
 }

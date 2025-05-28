@@ -12,7 +12,11 @@ export class GigService {
     this.gigRepository = new GigRepository();
   }
 
-  async getAllGigs(filter?: Partial<Gig>, page = 1, limit = 10): Promise<Gig[]> {
+  async getAllGigs(
+    filter?: Partial<Gig>,
+    page = 1,
+    limit = 10
+  ): Promise<Gig[]> {
     const skip = (page - 1) * limit;
     return this.gigRepository.findAll(filter, skip, limit);
   }
@@ -39,7 +43,10 @@ export class GigService {
   }
 
   @Transactional()
-  async updateGig(id: string, gigData: z.infer<typeof UpdateGigSchema>): Promise<Gig | null> {
+  async updateGig(
+    id: string,
+    gigData: z.infer<typeof UpdateGigSchema>
+  ): Promise<Gig | null> {
     try {
       // Validate the input data
       UpdateGigSchema.parse(gigData);

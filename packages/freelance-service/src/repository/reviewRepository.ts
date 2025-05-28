@@ -10,7 +10,11 @@ export class ReviewRepository {
     this.repository = dataSource.getRepository(Review);
   }
 
-  async findAll(filter?: Partial<Review>, skip = 0, take = 10): Promise<Review[]> {
+  async findAll(
+    filter?: Partial<Review>,
+    skip = 0,
+    take = 10
+  ): Promise<Review[]> {
     return this.repository.find({
       where: filter,
       skip,
@@ -32,13 +36,16 @@ export class ReviewRepository {
     return this.repository.save(review);
   }
 
-  async updateReview(id: string, reviewData: Partial<Review>): Promise<Review | null> {
+  async updateReview(
+    id: string,
+    reviewData: Partial<Review>
+  ): Promise<Review | null> {
     const review = await this.repository.findOneBy({ id });
-    
+
     if (!review) {
       return null;
     }
-    
+
     Object.assign(review, reviewData);
     return this.repository.save(review);
   }
@@ -78,7 +85,7 @@ export class ReviewRepository {
       .where("review.revieweeId = :userId", { userId })
       .select("AVG(review.rating)", "averageRating")
       .getRawOne();
-    
+
     return result?.averageRating || 0;
   }
 }

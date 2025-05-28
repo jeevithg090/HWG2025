@@ -11,7 +11,7 @@ interface Config {
     database: string;
     synchronize: boolean;
     logging: boolean;
-  }
+  };
 }
 
 const config: Record<string, Config> = {
@@ -23,9 +23,9 @@ const config: Record<string, Config> = {
       username: process.env.DB_USERNAME || "postgres",
       password: process.env.DB_PASSWORD || "postgres",
       database: process.env.DB_NAME || "freelance_service_db",
-      synchronize: true,
+      synchronize: false,
       logging: true,
-    }
+    },
   },
   production: {
     port: Number(process.env.PORT) || 4001,
@@ -35,9 +35,9 @@ const config: Record<string, Config> = {
       username: process.env.DB_USERNAME || "postgres",
       password: process.env.DB_PASSWORD || "postgres",
       database: process.env.DB_NAME || "freelance_service_db",
-      synchronize: false,  // Don't auto-synchronize in production
+      synchronize: false, // Don't auto-synchronize in production
       logging: false,
-    }
+    },
   },
   test: {
     port: Number(process.env.PORT) || 4001,
@@ -47,10 +47,10 @@ const config: Record<string, Config> = {
       username: process.env.DB_USERNAME || "postgres",
       password: process.env.DB_PASSWORD || "postgres",
       database: process.env.DB_NAME || "freelance_service_test_db",
-      synchronize: true,
+      synchronize: false,
       logging: false,
-    }
-  }
+    },
+  },
 };
 
 export default config[env];
