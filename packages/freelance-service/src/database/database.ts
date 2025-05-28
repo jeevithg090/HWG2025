@@ -34,7 +34,6 @@ export default class DatabaseConnection {
       if (!this._dataSource.isInitialized) {
         await this._dataSource.initialize();
         initializeTransactionalContext();
-        addTransactionalDataSource(this._dataSource);
         logger.info("📦 Database connected.");
       }
     } catch (error: any) {

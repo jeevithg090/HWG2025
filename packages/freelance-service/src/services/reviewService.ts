@@ -16,7 +16,11 @@ export class ReviewService {
     this.gigRepository = new GigRepository();
   }
 
-  async getAllReviews(filter?: Partial<Review>, page = 1, limit = 10): Promise<Review[]> {
+  async getAllReviews(
+    filter?: Partial<Review>,
+    page = 1,
+    limit = 10
+  ): Promise<Review[]> {
     const skip = (page - 1) * limit;
     return this.reviewRepository.findAll(filter, skip, limit);
   }
@@ -26,11 +30,13 @@ export class ReviewService {
   }
 
   @Transactional()
-  async createReview(reviewData: z.infer<typeof CreateReviewSchema>): Promise<Review> {
+  async createReview(
+    reviewData: z.infer<typeof CreateReviewSchema>
+  ): Promise<Review> {
     try {
       // Validate the input data
       CreateReviewSchema.parse(reviewData);
-      
+
       // Check if the gig exists and is completed
       const gig = await this.gigRepository.findById(reviewData.gigId);
       if (!gig) {
@@ -39,17 +45,17 @@ export class ReviewService {
       if (gig.status !== GigStatus.COMPLETED) {
         throw new Error("Can only review completed gigs");
       }
-      
+
       // Check if the user has already reviewed this gig
       const existingReview = await this.reviewRepository.findAll({
         gigId: reviewData.gigId,
         reviewerId: reviewData.reviewerId,
       });
-      
+
       if (existingReview.length > 0) {
         throw new Error("You have already reviewed this gig");
       }
-      
+
       return await this.reviewRepository.createReview(reviewData);
     } catch (error) {
       logger.error(`Error creating review: ${error}`);

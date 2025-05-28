@@ -1,5 +1,12 @@
 // src/models/gig.ts
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn } from "typeorm";
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+} from "typeorm";
 import Model from "./base";
 import { GigStatus } from "../enums/gigStatus";
 import { Proposal } from "./proposal";
@@ -22,10 +29,10 @@ export class Gig extends Model {
   @Column("text", { array: true, nullable: true })
   requiredSkills?: string[];
 
-  @Column({ 
-    type: "enum", 
-    enum: GigStatus, 
-    default: GigStatus.OPEN
+  @Column({
+    type: "enum",
+    enum: GigStatus,
+    default: GigStatus.OPEN,
   })
   status!: GigStatus;
 
@@ -38,9 +45,9 @@ export class Gig extends Model {
   @Column({ default: true })
   isActive!: boolean;
 
-  @OneToMany(() => Proposal, proposal => proposal.gig)
+  @OneToMany(() => Proposal, (proposal) => proposal.gig)
   proposals!: Proposal[];
 
-  @OneToMany(() => Review, review => review.gig)
+  @OneToMany(() => Review, (review) => review.gig)
   reviews!: Review[];
 }

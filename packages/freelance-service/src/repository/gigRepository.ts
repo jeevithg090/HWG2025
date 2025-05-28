@@ -7,7 +7,7 @@ export class GigRepository {
 
   constructor() {
     const dataSource = DatabaseConnection.getInstance();
-    dataSource.getDataSource().then(ds => {
+    dataSource.getDataSource().then((ds) => {
       this.repository = ds.getRepository(Gig);
     });
   }
@@ -38,11 +38,11 @@ export class GigRepository {
 
   async updateGig(id: string, gigData: Partial<Gig>): Promise<Gig | null> {
     const gig = await this.repository.findOneBy({ id });
-    
+
     if (!gig) {
       return null;
     }
-    
+
     Object.assign(gig, gigData);
     return this.repository.save(gig);
   }
@@ -61,7 +61,8 @@ export class GigRepository {
   }
 
   async searchGigs(query: string, skills?: string[]): Promise<Gig[]> {
-    let queryBuilder = this.repository.createQueryBuilder("gig")
+    let queryBuilder = this.repository
+      .createQueryBuilder("gig")
       .leftJoinAndSelect("gig.proposals", "proposal")
       .leftJoinAndSelect("gig.reviews", "review")
       .where("gig.isActive = :isActive", { isActive: true })
@@ -69,13 +70,13 @@ export class GigRepository {
         "(LOWER(gig.title) LIKE LOWER(:query) OR LOWER(gig.description) LIKE LOWER(:query))",
         { query: `%${query}%` }
       );
-    
+
     if (skills && skills.length > 0) {
       queryBuilder = queryBuilder.andWhere("gig.requiredSkills && :skills", {
         skills,
       });
     }
-    
+
     return queryBuilder.orderBy("gig.createdAt", "DESC").getMany();
   }
 }

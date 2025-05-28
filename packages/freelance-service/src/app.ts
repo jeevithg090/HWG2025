@@ -22,15 +22,17 @@ app.get("/health", (_req: Request, res: Response) => {
 });
 
 // API Routes
-app.use("/api/gigs", gigRoutes);
-app.use("/api/proposals", proposalRoutes);
-app.use("/api/reviews", reviewRoutes);
-app.use("/api/dashboard", dashboardRoutes);
+app.use("/gigs", gigRoutes);
+app.use("/proposals", proposalRoutes);
+app.use("/reviews", reviewRoutes);
+app.use("/dashboard", dashboardRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
-  logger.error(`Error processing request ${req.method} ${req.url}: ${err.message}`);
-  
+  logger.error(
+    `Error processing request ${req.method} ${req.url}: ${err.message}`
+  );
+
   res.status(500).json({
     status: "error",
     message: "An unexpected error occurred",
