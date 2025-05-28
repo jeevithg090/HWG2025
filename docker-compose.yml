@@ -65,8 +65,7 @@ services:
   #   ports:
   #     - "4001:4001"
   #   environment:
-  #     DB_URL: postgres://devuser:devpass@postgres:5432/postgresdb
-  #     USER_SERVICE_URL: http://user-service:4000/api/auth/validate
+  #     USER_SERVICE_URL: http://user-service:4000/auth/validate
   #   depends_on:
   #     - postgres
   #     - user-service
