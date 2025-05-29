@@ -1,0 +1,575 @@
+"use client"
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Progress } from "@/components/ui/progress"
+import {
+  Search,
+  Filter,
+  Plus,
+  MapPin,
+  Clock,
+  DollarSign,
+  Star,
+  Eye,
+  Users,
+  Briefcase,
+  Calendar,
+  MessageCircle,
+  MoreHorizontal,
+  Edit,
+  Pause,
+} from "lucide-react"
+import Link from "next/link"
+import { useState } from "react"
+import { useUser } from "@/lib/user-context"
+
+// Mock data
+const mockGigs = [
+  {
+    id: "1",
+    title: "React Native E-commerce App Development",
+    description:
+      "Looking for an experienced React Native developer to build a cross-platform e-commerce mobile application with payment integration, user authentication, and real-time notifications.",
+    budget: 5000,
+    budgetType: "fixed" as const,
+    duration: "2-3 months",
+    experienceLevel: "Expert",
+    skills: ["React Native", "TypeScript", "Firebase", "Stripe"],
+    location: "Remote",
+    postedBy: "TechCorp Inc.",
+    postedAt: "2024-01-15",
+    proposals: 12,
+    views: 156,
+    status: "active" as const,
+    category: "Mobile Development",
+  },
+  {
+    id: "2",
+    title: "AI-Powered Data Analytics Dashboard",
+    description:
+      "Need a full-stack developer to create an AI-powered analytics dashboard using Python, React, and machine learning libraries for data visualization and insights.",
+    budget: 75,
+    budgetType: "hourly" as const,
+    duration: "1-2 months",
+    experienceLevel: "Intermediate",
+    skills: ["Python", "React", "Machine Learning", "D3.js"],
+    location: "Remote",
+    postedBy: "DataFlow Startup",
+    postedAt: "2024-01-14",
+    proposals: 8,
+    views: 89,
+    status: "active" as const,
+    category: "Data Science",
+  },
+]
+
+const mockMyGigs = [
+  {
+    id: "3",
+    title: "Vue.js SPA for Healthcare Platform",
+    description:
+      "Building a single-page application for healthcare management with patient records, appointment scheduling, and telemedicine features.",
+    budget: 8000,
+    budgetType: "fixed" as const,
+    duration: "3-4 months",
+    experienceLevel: "Expert",
+    skills: ["Vue.js", "Node.js", "PostgreSQL", "WebRTC"],
+    location: "Remote",
+    postedAt: "2024-01-10",
+    proposals: 15,
+    views: 234,
+    status: "active" as const,
+    category: "Web Development",
+  },
+]
+
+const mockProposals = [
+  {
+    id: "1",
+    gigTitle: "React Native E-commerce App Development",
+    clientName: "TechCorp Inc.",
+    proposedBudget: 4800,
+    coverLetter: "I have 5+ years of experience in React Native development...",
+    status: "pending" as const,
+    submittedAt: "2024-01-16",
+    timeline: "10 weeks",
+  },
+  {
+    id: "2",
+    gigTitle: "AI-Powered Data Analytics Dashboard",
+    clientName: "DataFlow Startup",
+    proposedBudget: 70,
+    coverLetter: "I specialize in AI and data visualization...",
+    status: "accepted" as const,
+    submittedAt: "2024-01-15",
+    timeline: "8 weeks",
+  },
+]
+
+export default function FreelancingPage() {
+  const { user, isClient, isFreelancer, isStartup } = useUser()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [selectedBudget, setSelectedBudget] = useState("all")
+
+  // Client/Startup View
+  if (isClient || isStartup) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Project Management</h1>
+            <p className="text-muted-foreground">
+              {isStartup
+                ? "Manage your startup's projects and find talent"
+                : "Post projects and manage your freelance team"}
+            </p>
+          </div>
+          <Button asChild className="gap-2">
+            <Link href="/dashboard/freelancing/create-gig">
+              <Plus className="h-4 w-4" />
+              Post New Project
+            </Link>
+          </Button>
+        </div>
+
+        <Tabs defaultValue="my-projects" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="my-projects">My Projects</TabsTrigger>
+            <TabsTrigger value="active-contracts">Active Contracts</TabsTrigger>
+            <TabsTrigger value="proposals">Proposals Received</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="my-projects" className="space-y-6">
+            <div className="grid gap-6">
+              {mockMyGigs.map((gig) => (
+                <Card key={gig.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-xl">{gig.title}</CardTitle>
+                          <Badge variant={gig.status === "active" ? "default" : "secondary"}>{gig.status}</Badge>
+                        </div>
+                        <CardDescription className="text-base">{gig.description}</CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon">
+                          <Pause className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid md:grid-cols-4 gap-4 mb-4">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">
+                          ${gig.budget.toLocaleString()} {gig.budgetType === "hourly" ? "/hr" : "fixed"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span>{gig.duration}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                        <span>{gig.views} views</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span>{gig.proposals} proposals</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {gig.skills.map((skill) => (
+                        <Badge key={skill} variant="secondary">
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Posted on {new Date(gig.postedAt).toLocaleDateString()}
+                      </span>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm">
+                          View Proposals ({gig.proposals})
+                        </Button>
+                        <Button size="sm">Manage Project</Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="active-contracts" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Active Contracts</CardTitle>
+                <CardDescription>Projects currently in progress</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Active Contracts</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Once you hire freelancers, their contracts will appear here
+                  </p>
+                  <Button asChild>
+                    <Link href="/dashboard/freelancing/create-gig">Post Your First Project</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="proposals" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Proposals Received</CardTitle>
+                <CardDescription>Review and manage freelancer proposals</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Proposals Yet</h3>
+                  <p className="text-muted-foreground">
+                    Proposals from freelancers will appear here once you post projects
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <div className="grid md:grid-cols-3 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Total Projects</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">3</div>
+                  <p className="text-sm text-muted-foreground">+1 this month</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Total Spent</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">$12,500</div>
+                  <p className="text-sm text-muted-foreground">Across all projects</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Success Rate</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">95%</div>
+                  <p className="text-sm text-muted-foreground">Project completion</p>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    )
+  }
+
+  // Freelancer View
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Find Work</h1>
+          <p className="text-muted-foreground">Discover projects that match your skills and interests</p>
+        </div>
+        <Button asChild variant="outline" className="gap-2">
+          <Link href="/dashboard/freelancing/profile">
+            <Users className="h-4 w-4" />
+            My Profile
+          </Link>
+        </Button>
+      </div>
+
+      <Tabs defaultValue="browse-gigs" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="browse-gigs">Browse Projects</TabsTrigger>
+          <TabsTrigger value="my-proposals">My Proposals</TabsTrigger>
+          <TabsTrigger value="saved-gigs">Saved Projects</TabsTrigger>
+          <TabsTrigger value="my-stats">My Stats</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="browse-gigs" className="space-y-6">
+          {/* Search and Filters */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search projects by title, skills, or keywords..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-full md:w-48">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="web-development">Web Development</SelectItem>
+                    <SelectItem value="mobile-development">Mobile Development</SelectItem>
+                    <SelectItem value="data-science">Data Science</SelectItem>
+                    <SelectItem value="ui-ux-design">UI/UX Design</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={selectedBudget} onValueChange={setSelectedBudget}>
+                  <SelectTrigger className="w-full md:w-48">
+                    <SelectValue placeholder="Budget Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Budgets</SelectItem>
+                    <SelectItem value="under-1k">Under $1,000</SelectItem>
+                    <SelectItem value="1k-5k">$1,000 - $5,000</SelectItem>
+                    <SelectItem value="5k-10k">$5,000 - $10,000</SelectItem>
+                    <SelectItem value="over-10k">Over $10,000</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" className="gap-2">
+                  <Filter className="h-4 w-4" />
+                  More Filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Gig Listings */}
+          <div className="grid gap-6">
+            {mockGigs.map((gig) => (
+              <Card key={gig.id} className="hover:shadow-md transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <CardTitle className="text-xl">{gig.title}</CardTitle>
+                      <CardDescription className="text-base">{gig.description}</CardDescription>
+                    </div>
+                    <Badge variant="secondary">{gig.category}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-4 gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">
+                        ${gig.budget.toLocaleString()} {gig.budgetType === "hourly" ? "/hr" : "fixed"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>{gig.duration}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>{gig.location}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Star className="h-4 w-4 text-muted-foreground" />
+                      <span>{gig.experienceLevel}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {gig.skills.map((skill) => (
+                      <Badge key={skill} variant="secondary">
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>Posted by {gig.postedBy}</span>
+                      <span>{gig.proposals} proposals</span>
+                      <span>Posted {new Date(gig.postedAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm">
+                        Save
+                      </Button>
+                      <Button size="sm" asChild>
+                        <Link href={`/dashboard/freelancing/gig/${gig.id}/apply`}>Submit Proposal</Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="my-proposals" className="space-y-6">
+          <div className="grid gap-6">
+            {mockProposals.map((proposal) => (
+              <Card key={proposal.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{proposal.gigTitle}</CardTitle>
+                      <CardDescription>Client: {proposal.clientName}</CardDescription>
+                    </div>
+                    <Badge
+                      variant={
+                        proposal.status === "accepted"
+                          ? "default"
+                          : proposal.status === "pending"
+                            ? "secondary"
+                            : "destructive"
+                      }
+                    >
+                      {proposal.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-3 gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span>${proposal.proposedBudget.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span>{proposal.timeline}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Submitted {new Date(proposal.submittedAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-4">{proposal.coverLetter.substring(0, 150)}...</p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm">
+                      View Details
+                    </Button>
+                    {proposal.status === "pending" && (
+                      <Button variant="outline" size="sm">
+                        Edit Proposal
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="saved-gigs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Saved Projects</CardTitle>
+              <CardDescription>Projects you've bookmarked for later</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8">
+                <Star className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No Saved Projects</h3>
+                <p className="text-muted-foreground">Save interesting projects to review them later</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="my-stats" className="space-y-6">
+          <div className="grid md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Proposals Sent</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">12</div>
+                <p className="text-sm text-muted-foreground">This month</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Success Rate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">25%</div>
+                <p className="text-sm text-muted-foreground">Proposals accepted</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Total Earnings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">$8,500</div>
+                <p className="text-sm text-muted-foreground">All time</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Completion</CardTitle>
+              <CardDescription>Complete your profile to get more opportunities</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Profile completion</span>
+                  <span>75%</span>
+                </div>
+                <Progress value={75} />
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>Basic information completed</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>Skills added</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                  <span>Add portfolio projects</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                  <span>Get verified</span>
+                </div>
+              </div>
+              <Button asChild className="w-full">
+                <Link href="/dashboard/freelancing/profile">Complete Profile</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
