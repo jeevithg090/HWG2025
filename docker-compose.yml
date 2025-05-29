@@ -23,8 +23,15 @@ services:
     build: ./packages/user-service
     ports:
       - "4000:4000"
-    env_file:
-      - ./packages/user-service/.env
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      TOKEN_KEY: ${TOKEN_KEY}
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${USER_SERVICE_PORT}
     depends_on:
       - postgres
 
@@ -33,6 +40,13 @@ services:
     ports:
       - "4001:4001"
     environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${FREELANCE_SERVICE_PORT}
       USER_SERVICE_URL: http://user-service:4000/auth/validate
     depends_on:
       - postgres
@@ -43,6 +57,13 @@ services:
     ports:
       - "4002:4002"
     environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${EVENT_SERVICE_PORT}
       USER_SERVICE_URL: http://user-service:4000/auth/validate
     depends_on:
       - postgres
