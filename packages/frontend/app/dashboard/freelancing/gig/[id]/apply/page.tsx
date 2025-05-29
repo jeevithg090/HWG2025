@@ -13,12 +13,19 @@ import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowLeft, DollarSign, Calendar, Clock, Star, Paperclip, Send } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { freelanceApi } from "@/lib/api-client"
+import { useUser } from "@/lib/user-context"
+import { getAuthToken } from "@/lib/auth-utils"
+import { toast } from "sonner"
 
 export default function ApplyToGigPage({ params }: { params: { id: string } }) {
   const router = useRouter()
+  const { user } = useUser()
   const [isLoading, setIsLoading] = useState(false)
+  const [gig, setGig] = useState<any>(null)
+  const [isLoadingGig, setIsLoadingGig] = useState(true)
   const [proposal, setProposal] = useState({
     coverLetter: "",
     proposedRate: "",
@@ -27,26 +34,35 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
     questions: "",
   })
 
-  // Mock gig data
-  const gig = {
-    id: params.id,
-    title: "Build a React Native E-commerce App",
-    description:
-      "Looking for an experienced React Native developer to build a full-featured e-commerce mobile application with payment integration and admin panel.",
-    budget: "$2,500 - $4,000",
-    duration: "2-3 months",
-    skills: ["React Native", "Node.js", "MongoDB", "Stripe"],
-    client: {
-      name: "TechCorp Inc.",
-      avatar: "TC",
-      rating: 4.8,
-      reviews: 127,
-      jobsPosted: 45,
-      hireRate: 85,
-    },
-    postedDate: "3 days ago",
-    proposals: 12,
-  }
+  // Fetch gig details
+  useEffect(() => {
+    const fetchGigDetails = async () => {
+      try {
+        const token = getAuthToken()
+        if (!token) {
+          toast.error("Authentication required. Please log in again.")
+          router.push("/login")
+          return
+        }
+
+        const response = await freelanceApi.getGigById(params.id, token)
+        if (response.success) {
+          setGig(response.data)
+        } else {
+          toast.error("Failed to load project details")
+          router.push("/dashboard/freelancing")
+        }
+      } catch (error) {
+        console.error("Error fetching gig details:", error)
+        toast.error("Failed to load project details")
+        router.push("/dashboard/freelancing")
+      } finally {
+        setIsLoadingGig(false)
+      }
+    }
+
+    fetchGigDetails()
+  }, [params.id, router])
 
   const handleInputChange = (field: string, value: string) => {
     setProposal((prev) => ({ ...prev, [field]: value }))
@@ -56,11 +72,66 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
     e.preventDefault()
     setIsLoading(true)
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Get token using auth utility
+      const token = getAuthToken()
+      
+      if (!token || !user) {
+        toast.error("Authentication required. Please log in again.")
+        router.push("/login")
+        return
+      }
+      
+      // Validate form data
+      if (!proposal.coverLetter) {
+        toast.error("Please write a cover letter")
+        setIsLoading(false)
+        return
+      }
+      
+      // Parse rate as number if provided
+      let proposedRate = null
+      if (proposal.proposedRate) {
+        proposedRate = parseFloat(proposal.proposedRate)
+        if (isNaN(proposedRate)) {
+          toast.error("Please enter a valid rate")
+          setIsLoading(false)
+          return
+        }
+      }
+      
+      if (!token || !user) {
+        toast.error("Authentication required. Please log in again.")
+        router.push("/login")
+        return
+      }
+
+      // Prepare proposal data
+      const proposalData = {
+        gigId: params.id,
+        freelancerId: user.id,
+        coverLetter: proposal.coverLetter,
+        proposedRate: proposal.proposedRate,
+        estimatedDuration: proposal.estimatedDuration,
+        deliveryDate: proposal.deliveryDate,
+        questions: proposal.questions,
+      }
+
+      // Use API client to submit proposal
+      const response = await freelanceApi.createProposal(proposalData, token)
+      
+      if (response.success) {
+        toast.success("Proposal submitted successfully!")
+        router.push("/dashboard/freelancing?tab=proposals")
+      } else {
+        toast.error("Failed to submit proposal")
+      }
+    } catch (error) {
+      console.error("Error submitting proposal:", error)
+      toast.error("Failed to submit proposal. Please try again.")
+    } finally {
       setIsLoading(false)
-      router.push("/dashboard/freelancing?tab=proposals")
-    }, 2000)
+    }
   }
 
   return (
@@ -77,7 +148,27 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      {isLoadingGig ? (
+        <div className="flex justify-center p-10">
+          <div className="text-center">
+            <p className="text-muted-foreground mb-2">Loading project details...</p>
+            <Progress value={80} className="w-[300px]" />
+          </div>
+        </div>
+      ) : !gig ? (
+        <Card>
+          <CardContent className="py-10">
+            <div className="text-center space-y-4">
+              <h3 className="font-semibold text-lg">Project Not Found</h3>
+              <p className="text-muted-foreground">The project you're looking for doesn't exist or has been removed.</p>
+              <Button asChild>
+                <Link href="/dashboard/freelancing">Back to Projects</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid lg:grid-cols-3 gap-6">
         {/* Proposal Form */}
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -200,26 +291,26 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{gig.title}</CardTitle>
-              <CardDescription>Posted {gig.postedDate}</CardDescription>
+              <CardTitle className="text-lg">{gig?.title || 'Loading...'}</CardTitle>
+              <CardDescription>Posted {gig?.postedDate || 'Recently'}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm">{gig.description}</p>
+              <p className="text-sm">{gig?.description || 'Loading project description...'}</p>
 
               <Separator />
 
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{gig.budget}</span>
+                  <span className="font-medium">{gig?.budget || '$0'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span>{gig.duration}</span>
+                  <span>{gig?.duration || 'TBD'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>{gig.proposals} proposals submitted</span>
+                  <span>{gig?.proposals || 0} proposals submitted</span>
                 </div>
               </div>
 
@@ -228,11 +319,11 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
               <div>
                 <p className="text-sm font-medium mb-2">Required Skills:</p>
                 <div className="flex flex-wrap gap-1">
-                  {gig.skills.map((skill) => (
+                  {gig?.skills?.map((skill: string) => (
                     <Badge key={skill} variant="secondary" className="text-xs">
                       {skill}
                     </Badge>
-                  ))}
+                  )) || <span className="text-sm text-muted-foreground">Loading skills...</span>}
                 </div>
               </div>
             </CardContent>
@@ -246,14 +337,14 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
               <div className="flex items-center space-x-3">
                 <Avatar>
                   <AvatarImage src="/placeholder.svg?height=40&width=40" />
-                  <AvatarFallback>{gig.client.avatar}</AvatarFallback>
+                  <AvatarFallback>{gig?.client?.avatar || 'CL'}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium">{gig.client.name}</p>
+                  <p className="font-medium">{gig?.client?.name || 'Loading...'}</p>
                   <div className="flex items-center gap-1">
                     <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                     <span className="text-sm text-muted-foreground">
-                      {gig.client.rating} ({gig.client.reviews} reviews)
+                      {gig?.client?.rating || '0'} ({gig?.client?.reviews || '0'} reviews)
                     </span>
                   </div>
                 </div>
@@ -264,11 +355,11 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Jobs Posted:</span>
-                  <span className="font-medium">{gig.client.jobsPosted}</span>
+                  <span className="font-medium">{gig?.client?.jobsPosted || '0'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Hire Rate:</span>
-                  <span className="font-medium">{gig.client.hireRate}%</span>
+                  <span className="font-medium">{gig?.client?.hireRate || '0'}%</span>
                 </div>
               </div>
             </CardContent>
@@ -298,7 +389,7 @@ export default function ApplyToGigPage({ params }: { params: { id: string } }) {
             </CardContent>
           </Card>
         </div>
-      </div>
+      )}
     </div>
   )
 }

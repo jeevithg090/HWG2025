@@ -14,12 +14,15 @@ import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Calendar, MapPin, Clock, Users, Star, Share, ArrowLeft, CreditCard, Shield, CheckCircle } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { eventApi } from "@/lib/api-client"
 
 export default function EventRegistrationPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [eventLoading, setEventLoading] = useState(true)
+  const [event, setEvent] = useState<any>(null)
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -35,8 +38,28 @@ export default function EventRegistrationPage({ params }: { params: { id: string
     ticketType: "regular",
   })
 
-  // Mock event data
-  const event = {
+  // Fetch event data on component mount
+  useEffect(() => {
+    const fetchEvent = async () => {
+      try {
+        const response = await eventApi.getEventById(params.id)
+        if (response.success) {
+          setEvent(response.data.event || response.data)
+        } else {
+          console.error("Failed to fetch event")
+        }
+      } catch (error) {
+        console.error("Error fetching event:", error)
+      } finally {
+        setEventLoading(false)
+      }
+    }
+
+    fetchEvent()
+  }, [params.id])
+
+  // Mock event data as fallback
+  const mockEvent = {
     id: params.id,
     title: "AI Innovation Hackathon 2024",
     type: "Hackathon",
@@ -110,6 +133,9 @@ export default function EventRegistrationPage({ params }: { params: { id: string
     sponsors: ["Google", "Microsoft", "OpenAI", "TechCrunch"],
   }
 
+  // Use fetched event data or fallback to mock data
+  const currentEvent = event || mockEvent
+
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
@@ -123,14 +149,48 @@ export default function EventRegistrationPage({ params }: { params: { id: string
 
     setIsLoading(true)
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // For now, we'll use a mock user ID since auth isn't implemented in this component
+      // In a real app, you would get this from auth context
+      const registrationData = {
+        userId: "mock-user-id", // This should come from auth context
+        userEmail: formData.email,
+        userName: `${formData.firstName} ${formData.lastName}`,
+      }
+
+      // Call the actual event registration API
+      const response = await eventApi.registerForEvent(params.id, registrationData, "mock-token")
+      
+      if (response.success) {
+        router.push(`/events/${currentEvent.id}/confirmation`)
+      } else {
+        throw new Error("Registration failed")
+      }
+    } catch (error) {
+      console.error("Registration failed:", error)
+      alert("Registration failed. Please try again.")
+    } finally {
       setIsLoading(false)
-      router.push(`/events/${event.id}/confirmation`)
-    }, 2000)
+    }
   }
 
-  const selectedTicket = event.ticketTypes.find((t) => t.id === formData.ticketType)
+  const selectedTicket = currentEvent.ticketTypes?.find((t: any) => t.id === formData.ticketType)
+
+  // Show loading state while fetching event
+  if (eventLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-muted-foreground">Loading event details...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
@@ -231,7 +291,7 @@ export default function EventRegistrationPage({ params }: { params: { id: string
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-3">
-                      {event.ticketTypes.map((ticket) => (
+                      {event.ticketTypes.map((ticket: any) => (
                         <div
                           key={ticket.id}
                           className={`border rounded-lg p-4 cursor-pointer transition-colors ${
@@ -368,13 +428,13 @@ export default function EventRegistrationPage({ params }: { params: { id: string
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">{event.title}</CardTitle>
+                  <CardTitle className="text-lg">{currentEvent.title}</CardTitle>
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary">🏆 {event.type}</Badge>
+                    <Badge variant="secondary">🏆 {currentEvent.type}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">{event.description}</p>
+                  <p className="text-sm text-muted-foreground">{currentEvent.description}</p>
 
                   <Separator />
 
@@ -382,26 +442,26 @@ export default function EventRegistrationPage({ params }: { params: { id: string
                     <div className="flex items-center gap-2 text-sm">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <span>
-                        {event.startDate} - {event.endDate}
+                        {currentEvent.startDate} - {currentEvent.endDate}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <span>
-                        {event.startTime} - {event.endTime} {event.timezone}
+                        {currentEvent.startTime} - {currentEvent.endTime} {currentEvent.timezone}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <p>{event.venue}</p>
-                        <p className="text-muted-foreground">{event.address}</p>
+                        <p>{currentEvent.venue}</p>
+                        <p className="text-muted-foreground">{currentEvent.address}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Users className="h-4 w-4 text-muted-foreground" />
                       <span>
-                        {event.registeredCount} registered • {event.maxAttendees - event.registeredCount} spots left
+                        {currentEvent.registeredCount} registered • {currentEvent.maxAttendees - currentEvent.registeredCount} spots left
                       </span>
                     </div>
                   </div>
@@ -411,7 +471,7 @@ export default function EventRegistrationPage({ params }: { params: { id: string
                   <div>
                     <p className="text-sm font-medium mb-2">Event Tags:</p>
                     <div className="flex flex-wrap gap-1">
-                      {event.tags.map((tag) => (
+                      {currentEvent.tags?.map((tag: string) => (
                         <Badge key={tag} variant="outline" className="text-xs">
                           {tag}
                         </Badge>
@@ -429,14 +489,14 @@ export default function EventRegistrationPage({ params }: { params: { id: string
                   <div className="flex items-center space-x-3">
                     <Avatar>
                       <AvatarImage src="/placeholder.svg?height=40&width=40" />
-                      <AvatarFallback>{event.organizer.avatar}</AvatarFallback>
+                      <AvatarFallback>{currentEvent.organizer?.avatar}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium">{event.organizer.name}</p>
+                      <p className="font-medium">{currentEvent.organizer?.name}</p>
                       <div className="flex items-center gap-1">
                         <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                         <span className="text-sm text-muted-foreground">
-                          {event.organizer.rating} • {event.organizer.eventsHosted} events hosted
+                          {currentEvent.organizer?.rating} • {currentEvent.organizer?.eventsHosted} events hosted
                         </span>
                       </div>
                     </div>

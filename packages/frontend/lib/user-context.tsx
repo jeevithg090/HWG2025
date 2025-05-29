@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
+import { getUserFromStorage, setUserInStorage, removeUserFromStorage, clearAuthData } from "./auth-utils"
 
 export type UserRole = "freelancer" | "client" | "startup"
 
@@ -30,12 +31,27 @@ const UserContext = createContext<UserContextType | undefined>(undefined)
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
 
-  // Mock user data - in real app, this would come from authentication
+  // Get user data from auth context instead of using mock data
   useEffect(() => {
-    // Check if user data exists in localStorage
-    const savedUser = localStorage.getItem("techcollab_user")
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
+    // Using getUserFromStorage from auth-utils
+    const userData = getUserFromStorage();
+    if (userData) {
+      try {
+        // Transform backend user format to our User interface if needed
+        const transformedUser: User = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          role: userData.type?.toLowerCase() as UserRole,
+          avatar: userData.avatar || undefined,
+          company: userData.company || undefined,
+          verified: userData.active || false,
+          joinedAt: userData.createdAt || new Date().toISOString(),
+        };
+        setUser(transformedUser);
+      } catch (e) {
+        console.error('Failed to parse stored user data', e);
+      }
     } else {
       // Default to null - user needs to sign up/sign in
       setUser(null)
@@ -46,14 +62,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const isFreelancer = user?.role === "freelancer"
   const isStartup = user?.role === "startup"
 
-  const saveUser = (userData: User) => {
+  const saveUser = (userData: User | null) => {
     setUser(userData)
-    localStorage.setItem("techcollab_user", JSON.stringify(userData))
+    if (userData) {
+      setUserInStorage(userData)
+    } else {
+      removeUserFromStorage()
+    }
   }
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem("techcollab_user")
+    clearAuthData() // Clears both user data and auth token
   }
 
   return (

@@ -11,10 +11,13 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, Github, Mail, Eye, EyeOff, Briefcase, Building, Users } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
+import { toast } from "sonner"
 
 export default function SignUpPage() {
+  const { signup, isLoading: authLoading, isAuthenticated } = useAuth()
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -31,6 +34,13 @@ export default function SignUpPage() {
     subscribeNewsletter: false,
   })
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard')
+    }
+  }, [isAuthenticated, router])
+
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
@@ -38,21 +48,40 @@ export default function SignUpPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.password !== formData.confirmPassword) {
-      alert("Passwords don't match!")
+      toast.error("Passwords don't match!")
       return
     }
     if (!formData.agreeToTerms) {
-      alert("Please agree to the terms and conditions")
+      toast.error("Please agree to the terms and conditions")
       return
     }
 
     setIsLoading(true)
-
-    // Simulate API call
-    setTimeout(() => {
+    
+    try {
+      // Prepare user data for API
+      const userData = {
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        password: formData.password,
+        type: formData.role || 'FREELANCER', // Default role
+      }
+      
+      console.log('Submitting signup data:', { ...userData, password: '******' });
+      const success = await signup(userData)
+      
+      if (success) {
+        toast.success('Account created successfully! Please sign in.')
+        router.push('/auth/signin')
+      } else {
+        toast.error('Failed to create account. Please try again.')
+      }
+    } catch (error) {
+      console.error('Signup error:', error)
+      toast.error('An error occurred during signup. Please try again.')
+    } finally {
       setIsLoading(false)
-      router.push("/dashboard")
-    }, 2000)
+    }
   }
 
   const roleOptions = [
@@ -118,7 +147,13 @@ export default function SignUpPage() {
                     }`}
                     onClick={() => {
                       setSelectedRole(role.value)
-                      handleInputChange("role", role.value)
+                      // Map UI roles to API roles (FREELANCER, CLIENT, STARTUP)
+                      const apiRoleMap = {
+                        freelancer: 'FREELANCER',
+                        client: 'CLIENT',
+                        startup: 'STARTUP'
+                      }
+                      handleInputChange("role", apiRoleMap[role.value as keyof typeof apiRoleMap])
                     }}
                   >
                     <div className="flex items-center space-x-4">

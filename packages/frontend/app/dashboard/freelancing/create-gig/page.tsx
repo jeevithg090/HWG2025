@@ -16,6 +16,9 @@ import Link from "next/link"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/lib/user-context"
+import { freelanceApi } from "@/lib/api-client"
+import { getAuthToken } from "@/lib/auth-utils"
+import { toast } from "sonner"
 
 export default function CreateGigPage() {
   const router = useRouter()
@@ -62,12 +65,52 @@ export default function CreateGigPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
-    // Simulate API call
-    setTimeout(() => {
+    
+    try {
+      // Get token using auth utility
+      const token = getAuthToken()
+      
+      if (!token) {
+        toast.error("Authentication required. Please log in again.")
+        router.push("/login")
+        return
+      }
+      
+      // Validate form data
+      if (!formData.title || !formData.description || !formData.budget) {
+        toast.error("Please fill all required fields")
+        setIsLoading(false)
+        return
+      }
+      
+      // Parse budget as number
+      const budget = formData.budgetType === "fixed" 
+        ? parseFloat(formData.budget) 
+        : parseFloat(formData.budget)
+      
+      // Prepare gig data
+      const gigData = {
+        ...formData,
+        budget,
+        skills,
+        clientId: user?.id,
+      }
+      
+      // Use API client to create a project
+      const response = await freelanceApi.createProject(gigData, token)
+      
+      if (response.success) {
+        toast.success("Project created successfully!")
+        router.push("/dashboard/freelancing?tab=my-gigs")
+      } else {
+        toast.error("Failed to create project")
+      }
+    } catch (error) {
+      console.error("Error creating project:", error)
+      toast.error("Failed to create project. Please try again.")
+    } finally {
       setIsLoading(false)
-      router.push("/dashboard/freelancing?tab=my-gigs")
-    }, 2000)
+    }
   }
 
   return (

@@ -1,21 +1,113 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Briefcase, Calendar, MessageCircle, DollarSign, Users, Star, ArrowUpRight, Plus } from 'lucide-react'
+import { useAuth } from "@/lib/auth-context"
+import { freelanceApi, eventApi } from "@/lib/api-client"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+
+// Define types for our data
+interface Project {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  budgetMin: number;
+  budgetMax: number;
+  category: string;
+}
+
+interface Event {
+  id: string;
+  title: string;
+  eventType: string;
+  startDateTime: string;
+  currentAttendees: number;
+  maxAttendees?: number;
+}
 
 export default function DashboardPage() {
+  const { user, isAuthenticated, token } = useAuth();
+  const router = useRouter();
+  
+  const [stats, setStats] = useState({
+    activeGigs: 0,
+    upcomingEvents: 0,
+    messages: 0,
+    earnings: 0
+  });
+  const [events, setEvents] = useState<Event[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated && typeof window !== 'undefined') {
+      router.push('/auth');
+    }
+  }, [isAuthenticated, router]);
+  
+  // Fetch dashboard data
+  useEffect(() => {
+    if (token) {
+      const fetchData = async () => {
+        try {
+          // Fetch events
+          const eventsResponse = await eventApi.getAllEvents({ isActive: true }, token);
+          if (eventsResponse.success) {
+            setEvents(eventsResponse.events.slice(0, 3));
+            setStats(prev => ({ ...prev, upcomingEvents: eventsResponse.events.length }));
+          }
+          
+          // Fetch projects
+          const projectsResponse = await freelanceApi.getProjects({}, token);
+          if (projectsResponse.success) {
+            setProjects(projectsResponse.data.slice(0, 3));
+            setStats(prev => ({ 
+              ...prev, 
+              activeGigs: projectsResponse.data.filter((p: any) => p.status === 'open').length 
+            }));
+          }
+          
+          // Set mock data for other stats
+          setStats(prev => ({
+            ...prev,
+            messages: 5,
+            earnings: 1250
+          }));
+        } catch (error) {
+          console.error('Error fetching dashboard data:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchData();
+    }
+  }, [token]);
+
+  if (!isAuthenticated) {
+    return null; // Will redirect in useEffect
+  }
+  
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Welcome back, John! 👋</h1>
+          <h1 className="text-3xl font-bold">Welcome back, {user?.name?.split(' ')[0] || 'User'}! 👋</h1>
           <p className="text-muted-foreground">Here's what's happening with your projects today.</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Quick Action
+        <Button className="gap-2" asChild>
+          <Link href="/freelance/create">
+            <Plus className="h-4 w-4" />
+            Create Project
+          </Link>
         </Button>
       </div>
 
@@ -27,7 +119,7 @@ export default function DashboardPage() {
             <Briefcase className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
+            <div className="text-2xl font-bold">{loading ? '-' : stats.activeGigs}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-green-600">+2</span> from last month
             </p>
@@ -40,7 +132,7 @@ export default function DashboardPage() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8</div>
+            <div className="text-2xl font-bold">{loading ? '-' : stats.upcomingEvents}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-blue-600">3</span> this week
             </p>
@@ -49,24 +141,26 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Messages</CardTitle>
+            <CardTitle className="text-sm font-medium">Unread Messages</CardTitle>
             <MessageCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">24</div>
+            <div className="text-2xl font-bold">{loading ? '-' : stats.messages}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-orange-600">5</span> unread
+              <span className="text-amber-600">2</span> require attention
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">This Month Earnings</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$4,250</div>
+            <div className="text-2xl font-bold">
+              ${loading ? '-' : stats.earnings.toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground">
               <span className="text-green-600">+12%</span> from last month
             </p>
@@ -74,143 +168,104 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activity */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Your latest interactions across the platform</CardDescription>
+      {/* Recent Activity */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="col-span-2">
+          <CardHeader className="flex flex-row items-center">
+            <div className="flex-1">
+              <CardTitle>Recent Projects</CardTitle>
+              <CardDescription>
+                Your most recent gigs and applications
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" className="gap-1" asChild>
+              <Link href="/freelance">
+                View all
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">New proposal submitted for "React Native App"</p>
-                <p className="text-xs text-muted-foreground">2 hours ago</p>
+          <CardContent>
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading projects...</div>
+            ) : projects.length > 0 ? (
+              <div className="space-y-8">
+                {projects.map((project, i) => (
+                  <div key={project.id || i} className="flex items-start space-x-4">
+                    <div>
+                      <div className="rounded w-12 h-12 flex items-center justify-center bg-primary/10 text-primary">
+                        <Briefcase className="h-6 w-6" />
+                      </div>
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium leading-none">{project.title}</p>
+                        <Badge>{project.status || 'Open'}</Badge>
+                      </div>
+                      <p className="line-clamp-2 text-sm text-muted-foreground">
+                        {project.description}
+                      </p>
+                      <div className="flex items-center text-xs text-muted-foreground">
+                        <DollarSign className="h-3 w-3 mr-1" />
+                        <span>${project.budgetMin} - ${project.budgetMax}</span>
+                        <span className="mx-2">•</span>
+                        <span>{project.category || 'Development'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <Badge variant="secondary">Freelancing</Badge>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Registered for "AI/ML Workshop"</p>
-                <p className="text-xs text-muted-foreground">4 hours ago</p>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-4">No active projects found</p>
+                <Button asChild>
+                  <Link href="/freelance">Find Projects</Link>
+                </Button>
               </div>
-              <Badge variant="secondary">Events</Badge>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Joined "Frontend Developers" group</p>
-                <p className="text-xs text-muted-foreground">1 day ago</p>
-              </div>
-              <Badge variant="secondary">Community</Badge>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Completed project "E-commerce Dashboard"</p>
-                <p className="text-xs text-muted-foreground">2 days ago</p>
-              </div>
-              <Badge variant="secondary">Freelancing</Badge>
-            </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Quick Stats */}
         <Card>
           <CardHeader>
-            <CardTitle>Performance</CardTitle>
-            <CardDescription>Your platform statistics</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Profile Completion</span>
-                <span className="text-sm text-muted-foreground">85%</span>
-              </div>
-              <Progress value={85} className="h-2" />
-            </div>
-            
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Success Rate</span>
-                <span className="text-sm text-muted-foreground">92%</span>
-              </div>
-              <Progress value={92} className="h-2" />
-            </div>
-            
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Response Time</span>
-                <span className="text-sm text-muted-foreground">{"< 2h"}</span>
-              </div>
-              <Progress value={95} className="h-2" />
-            </div>
-
-            <div className="pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  <span className="text-sm font-medium">Rating</span>
-                </div>
-                <span className="text-sm font-bold">4.9/5</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Briefcase className="h-5 w-5 text-blue-600" />
-              Browse Gigs
-            </CardTitle>
-            <CardDescription>Find your next freelance opportunity</CardDescription>
+            <CardTitle>Upcoming Events</CardTitle>
+            <CardDescription>Events you've registered for</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" className="w-full">
-              Explore Opportunities
-              <ArrowUpRight className="ml-2 h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-purple-600" />
-              Create Event
-            </CardTitle>
-            <CardDescription>Organize your next tech meetup</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full">
-              Start Planning
-              <ArrowUpRight className="ml-2 h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-green-600" />
-              Join Community
-            </CardTitle>
-            <CardDescription>Connect with like-minded developers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full">
-              Discover Groups
-              <ArrowUpRight className="ml-2 h-4 w-4" />
-            </Button>
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading events...</div>
+            ) : events.length > 0 ? (
+              <div className="space-y-6">
+                {events.map((event, i) => (
+                  <div key={event.id || i} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">{event.title}</div>
+                      <Badge variant="outline">{event.eventType}</Badge>
+                    </div>
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      <span>{new Date(event.startDateTime).toLocaleDateString()}</span>
+                      <span className="mx-1">•</span>
+                      <span>{new Date(event.startDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <Users className="h-3 w-3 mr-1" />
+                      <span>{event.currentAttendees}/{event.maxAttendees || '∞'} registered</span>
+                    </div>
+                  </div>
+                ))}
+                <Button size="sm" className="w-full" variant="outline" asChild>
+                  <Link href="/events">View All Events</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-4">No upcoming events</p>
+                <Button size="sm" asChild>
+                  <Link href="/events">Find Events</Link>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
