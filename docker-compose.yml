@@ -19,44 +19,21 @@ services:
     # networks: # Assign to custom network
     #   - my-app-network
 
-  mongo:
-    image: mongo:6
-    container_name: mongo
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodata:/data/db
-
-  # Admin interfaces
-  # pgadmin:
-  #   image: dpage/pgadmin4
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-  #     PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
-  #   ports:
-  #     - "8080:80"
-  #   depends_on:
-  #     - postgres
-
-  # mongo-express:
-  #   image: mongo-express
-  #   restart: always
-  #   environment:
-  #     ME_CONFIG_MONGODB_SERVER: mongo
-  #     ME_CONFIG_BASICAUTH_USERNAME: ${ME_CONFIG_BASICAUTH_USERNAME}
-  #     ME_CONFIG_BASICAUTH_PASSWORD: ${ME_CONFIG_BASICAUTH_PASSWORD}
-  #   ports:
-  #     - "8081:8081"
-  #   depends_on:
-  #     - mongo
-
   user-service:
     build: ./packages/user-service
     ports:
       - "4000:4000"
     env_file:
-      - ./packages/user-service/.env
+      - .env
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      TOKEN_KEY: ${TOKEN_KEY}
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${USER_SERVICE_PORT}
     depends_on:
       - postgres
 
@@ -64,7 +41,16 @@ services:
     build: ./packages/freelance-service
     ports:
       - "4001:4001"
+    env_file:
+      - .env
     environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${FREELANCE_SERVICE_PORT}
       USER_SERVICE_URL: http://user-service:4000/auth/validate
     depends_on:
       - postgres
@@ -74,7 +60,16 @@ services:
     build: ./packages/event-service
     ports:
       - "4002:4002"
+    env_file:
+      - .env
     environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${EVENT_SERVICE_PORT}
       USER_SERVICE_URL: http://user-service:4000/auth/validate
     depends_on:
       - postgres
@@ -84,7 +79,12 @@ services:
     build: ./packages/frontend
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
+      NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
+      NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL}
+      NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
       USER_SERVICE_URL: http://user-service:4000/auth/validate
     depends_on:
       - postgres
@@ -92,24 +92,5 @@ services:
       - freelance-service
       - event-service
 
-  # chat-service:
-  #   build: ./packages/chat-service
-  #   ports:
-  #     - "4003:4003"
-  #   environment:
-  #     MONGO_URL: ${MONGO_URL}/chatdb
-  #   depends_on:
-  #     - mongo
-
-  # notification-service:
-  #   build: ./packages/notification-service
-  #   ports:
-  #     - "4004:4004"
-  #   environment:
-  #     MONGO_URL: ${MONGO_URL}/notifications
-  #   depends_on:
-  #     - mongo
-
 volumes:
   pgdata:
-  mongodata:
