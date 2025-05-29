@@ -1,29 +1,52 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Plus, X, DollarSign, Calendar, MapPin, Users } from "lucide-react"
-import Link from "next/link"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { useUser } from "@/lib/user-context"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  ArrowLeft,
+  Plus,
+  X,
+  DollarSign,
+  Calendar,
+  MapPin,
+  Users,
+} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useUser } from "@/lib/user-context";
+import { freelanceApi } from "@/lib/api-client";
+import { getAuthToken } from "@/lib/auth-utils";
+import { toast } from "sonner";
 
 export default function CreateGigPage() {
-  const router = useRouter()
-  const { user, isClient, isStartup } = useUser()
+  const router = useRouter();
+  const { user, isClient, isStartup } = useUser();
 
-  const [skills, setSkills] = useState<string[]>([])
-  const [newSkill, setNewSkill] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [skills, setSkills] = useState<string[]>([]);
+  const [newSkill, setNewSkill] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -32,43 +55,84 @@ export default function CreateGigPage() {
     budgetType: "fixed",
     duration: "",
     experienceLevel: "",
-    location: "",
+    projectLocation: "",
     isRemote: true,
     requirements: "",
     deliverables: "",
-  })
+  });
 
   // Redirect if not authorized
   if (!isClient && !isStartup) {
-    router.push("/dashboard/freelancing")
-    return null
+    router.push("/dashboard/freelancing");
+    return null;
   }
 
   const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   const addSkill = () => {
     if (newSkill.trim() && !skills.includes(newSkill.trim())) {
-      setSkills([...skills, newSkill.trim()])
-      setNewSkill("")
+      setSkills([...skills, newSkill.trim()]);
+      setNewSkill("");
     }
-  }
+  };
 
   const removeSkill = (skillToRemove: string) => {
-    setSkills(skills.filter((skill) => skill !== skillToRemove))
-  }
+    setSkills(skills.filter((skill) => skill !== skillToRemove));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false)
-      router.push("/dashboard/freelancing?tab=my-gigs")
-    }, 2000)
-  }
+    try {
+      // Get token using auth utility
+      const token = getAuthToken();
+
+      if (!token) {
+        toast.error("Authentication required. Please log in again.");
+        router.push("/login");
+        return;
+      }
+
+      // Validate form data
+      if (!formData.title || !formData.description || !formData.budget) {
+        toast.error("Please fill all required fields");
+        setIsLoading(false);
+        return;
+      }
+
+      // Parse budget as number
+      const budget =
+        formData.budgetType === "fixed"
+          ? parseFloat(formData.budget)
+          : parseFloat(formData.budget);
+
+      // Prepare gig data
+      const gigData = {
+        ...formData,
+        budget,
+        skills,
+        clientId: user?.id,
+      };
+
+      // Use API client to create a project
+      const response = await freelanceApi.createProject(gigData, token);
+
+      if (response.success) {
+        toast.success("Project created successfully!");
+        router.push("/dashboard/freelancing?tab=my-gigs");
+      } else {
+        toast.error("Failed to create project");
+      }
+    } catch (error) {
+      console.error("Error creating project:", error);
+      toast.error("Failed to create project. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -79,9 +143,13 @@ export default function CreateGigPage() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold">{isStartup ? "Post Startup Project" : "Create New Project"}</h1>
+          <h1 className="text-3xl font-bold">
+            {isStartup ? "Post Startup Project" : "Create New Project"}
+          </h1>
           <p className="text-muted-foreground">
-            {isStartup ? "Find talented developers for your startup" : "Post a project and find the perfect freelancer"}
+            {isStartup
+              ? "Find talented developers for your startup"
+              : "Post a project and find the perfect freelancer"}
           </p>
         </div>
       </div>
@@ -94,7 +162,9 @@ export default function CreateGigPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Project Details</CardTitle>
-                <CardDescription>Provide basic information about your project</CardDescription>
+                <CardDescription>
+                  Provide basic information about your project
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -110,18 +180,31 @@ export default function CreateGigPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="category">Category *</Label>
-                  <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
+                  <Select
+                    value={formData.category}
+                    onValueChange={(value) =>
+                      handleInputChange("category", value)
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select project category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="web-development">Web Development</SelectItem>
-                      <SelectItem value="mobile-development">Mobile Development</SelectItem>
+                      <SelectItem value="web-development">
+                        Web Development
+                      </SelectItem>
+                      <SelectItem value="mobile-development">
+                        Mobile Development
+                      </SelectItem>
                       <SelectItem value="ui-ux-design">UI/UX Design</SelectItem>
-                      <SelectItem value="data-science">Data Science & Analytics</SelectItem>
+                      <SelectItem value="data-science">
+                        Data Science & Analytics
+                      </SelectItem>
                       <SelectItem value="devops">DevOps & Cloud</SelectItem>
                       <SelectItem value="blockchain">Blockchain</SelectItem>
-                      <SelectItem value="ai-ml">AI & Machine Learning</SelectItem>
+                      <SelectItem value="ai-ml">
+                        AI & Machine Learning
+                      </SelectItem>
                       <SelectItem value="qa-testing">QA & Testing</SelectItem>
                     </SelectContent>
                   </Select>
@@ -133,7 +216,9 @@ export default function CreateGigPage() {
                     id="description"
                     placeholder="Describe your project in detail. Include goals, features, and any specific requirements..."
                     value={formData.description}
-                    onChange={(e) => handleInputChange("description", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("description", e.target.value)
+                    }
                     rows={6}
                     required
                   />
@@ -146,7 +231,9 @@ export default function CreateGigPage() {
                       placeholder="Add a skill (e.g., React, Node.js)"
                       value={newSkill}
                       onChange={(e) => setNewSkill(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
+                      onKeyPress={(e) =>
+                        e.key === "Enter" && (e.preventDefault(), addSkill())
+                      }
                     />
                     <Button type="button" onClick={addSkill} size="icon">
                       <Plus className="h-4 w-4" />
@@ -155,7 +242,11 @@ export default function CreateGigPage() {
                   {skills.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {skills.map((skill) => (
-                        <Badge key={skill} variant="secondary" className="gap-1">
+                        <Badge
+                          key={skill}
+                          variant="secondary"
+                          className="gap-1"
+                        >
                           {skill}
                           <Button
                             type="button"
@@ -178,7 +269,9 @@ export default function CreateGigPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Budget & Timeline</CardTitle>
-                <CardDescription>Set your project budget and expected timeline</CardDescription>
+                <CardDescription>
+                  Set your project budget and expected timeline
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
@@ -186,7 +279,9 @@ export default function CreateGigPage() {
                     <Label>Budget Type</Label>
                     <Select
                       value={formData.budgetType}
-                      onValueChange={(value) => handleInputChange("budgetType", value)}
+                      onValueChange={(value) =>
+                        handleInputChange("budgetType", value)
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -199,15 +294,23 @@ export default function CreateGigPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="budget">Budget ({formData.budgetType === "hourly" ? "per hour" : "total"}) *</Label>
+                    <Label htmlFor="budget">
+                      Budget (
+                      {formData.budgetType === "hourly" ? "per hour" : "total"})
+                      *
+                    </Label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="budget"
                         type="number"
-                        placeholder={formData.budgetType === "hourly" ? "50" : "5000"}
+                        placeholder={
+                          formData.budgetType === "hourly" ? "50" : "5000"
+                        }
                         value={formData.budget}
-                        onChange={(e) => handleInputChange("budget", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("budget", e.target.value)
+                        }
                         className="pl-10"
                         required
                       />
@@ -218,7 +321,12 @@ export default function CreateGigPage() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="duration">Project Duration *</Label>
-                    <Select value={formData.duration} onValueChange={(value) => handleInputChange("duration", value)}>
+                    <Select
+                      value={formData.duration}
+                      onValueChange={(value) =>
+                        handleInputChange("duration", value)
+                      }
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select duration" />
                       </SelectTrigger>
@@ -236,14 +344,18 @@ export default function CreateGigPage() {
                     <Label htmlFor="experienceLevel">Experience Level *</Label>
                     <Select
                       value={formData.experienceLevel}
-                      onValueChange={(value) => handleInputChange("experienceLevel", value)}
+                      onValueChange={(value) =>
+                        handleInputChange("experienceLevel", value)
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select level" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="entry">Entry Level</SelectItem>
-                        <SelectItem value="intermediate">Intermediate</SelectItem>
+                        <SelectItem value="intermediate">
+                          Intermediate
+                        </SelectItem>
                         <SelectItem value="expert">Expert</SelectItem>
                       </SelectContent>
                     </Select>
@@ -256,14 +368,18 @@ export default function CreateGigPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Additional Details</CardTitle>
-                <CardDescription>Specify location preferences and project requirements</CardDescription>
+                <CardDescription>
+                  Specify location preferences and project requirements
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="remote"
                     checked={formData.isRemote}
-                    onCheckedChange={(checked) => handleInputChange("isRemote", checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      handleInputChange("isRemote", checked as boolean)
+                    }
                   />
                   <Label htmlFor="remote">This is a remote project</Label>
                 </div>
@@ -276,8 +392,10 @@ export default function CreateGigPage() {
                       <Input
                         id="location"
                         placeholder="e.g., San Francisco, CA"
-                        value={formData.location}
-                        onChange={(e) => handleInputChange("location", e.target.value)}
+                        value={formData.projectLocation}
+                        onChange={(e) =>
+                          handleInputChange("location", e.target.value)
+                        }
                         className="pl-10"
                       />
                     </div>
@@ -290,7 +408,9 @@ export default function CreateGigPage() {
                     id="requirements"
                     placeholder="Any specific requirements, tools, or preferences..."
                     value={formData.requirements}
-                    onChange={(e) => handleInputChange("requirements", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("requirements", e.target.value)
+                    }
                     rows={3}
                   />
                 </div>
@@ -301,7 +421,9 @@ export default function CreateGigPage() {
                     id="deliverables"
                     placeholder="What should be delivered at the end of the project..."
                     value={formData.deliverables}
-                    onChange={(e) => handleInputChange("deliverables", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("deliverables", e.target.value)
+                    }
                     rows={3}
                   />
                 </div>
@@ -314,11 +436,15 @@ export default function CreateGigPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Preview</CardTitle>
-                <CardDescription>How your gig will appear to freelancers</CardDescription>
+                <CardDescription>
+                  How your gig will appear to freelancers
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <h3 className="font-semibold text-lg">{formData.title || "Project Title"}</h3>
+                  <h3 className="font-semibold text-lg">
+                    {formData.title || "Project Title"}
+                  </h3>
                   <p className="text-sm text-muted-foreground mt-1">
                     {formData.description
                       ? formData.description.substring(0, 100) + "..."
@@ -342,11 +468,17 @@ export default function CreateGigPage() {
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{formData.isRemote ? "Remote" : formData.location || "Location not set"}</span>
+                    <span>
+                      {formData.isRemote
+                        ? "Remote"
+                        : formData.projectLocation || "Location not set"}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Users className="h-4 w-4 text-muted-foreground" />
-                    <span>{formData.experienceLevel || "Experience level not set"}</span>
+                    <span>
+                      {formData.experienceLevel || "Experience level not set"}
+                    </span>
                   </div>
                 </div>
 
@@ -354,10 +486,16 @@ export default function CreateGigPage() {
                   <>
                     <Separator />
                     <div>
-                      <p className="text-sm font-medium mb-2">Required Skills:</p>
+                      <p className="text-sm font-medium mb-2">
+                        Required Skills:
+                      </p>
                       <div className="flex flex-wrap gap-1">
                         {skills.map((skill) => (
-                          <Badge key={skill} variant="secondary" className="text-xs">
+                          <Badge
+                            key={skill}
+                            variant="secondary"
+                            className="text-xs"
+                          >
                             {skill}
                           </Badge>
                         ))}
@@ -408,5 +546,5 @@ export default function CreateGigPage() {
         </div>
       </form>
     </div>
-  )
+  );
 }

@@ -23,6 +23,8 @@ services:
     build: ./packages/user-service
     ports:
       - "4000:4000"
+    env_file:
+      - .env
     environment:
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
@@ -39,6 +41,8 @@ services:
     build: ./packages/freelance-service
     ports:
       - "4001:4001"
+    env_file:
+      - .env
     environment:
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
@@ -56,6 +60,8 @@ services:
     build: ./packages/event-service
     ports:
       - "4002:4002"
+    env_file:
+      - .env
     environment:
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
@@ -73,31 +79,18 @@ services:
     build: ./packages/frontend
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
+      NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
+      NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL}
+      NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
       USER_SERVICE_URL: http://user-service:4000/auth/validate
     depends_on:
       - postgres
       - user-service
       - freelance-service
       - event-service
-
-  # chat-service:
-  #   build: ./packages/chat-service
-  #   ports:
-  #     - "4003:4003"
-  #   environment:
-  #     MONGO_URL: ${MONGO_URL}/chatdb
-  #   depends_on:
-  #     - mongo
-
-  # notification-service:
-  #   build: ./packages/notification-service
-  #   ports:
-  #     - "4004:4004"
-  #   environment:
-  #     MONGO_URL: ${MONGO_URL}/notifications
-  #   depends_on:
-  #     - mongo
 
 volumes:
   pgdata:

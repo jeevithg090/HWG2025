@@ -16,6 +16,7 @@ import { ArrowLeft, Plus, X, Calendar, MapPin, Users, DollarSign, Video, Upload,
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { eventApi } from "@/lib/api-client"
 
 export default function CreateEventPage() {
   const router = useRouter()
@@ -82,11 +83,42 @@ export default function CreateEventPage() {
     e.preventDefault()
     setIsLoading(true)
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Get auth token - for now using mock
+      const token = "mock-token" // This should come from auth context
+      
+      // Prepare event data for the backend API
+      const eventData = {
+        title: formData.title,
+        description: formData.description,
+        startDateTime: new Date(`${formData.startDate}T${formData.startTime}`),
+        endDateTime: new Date(`${formData.endDate}T${formData.endTime}`),
+        eventType: formData.eventType,
+        maxAttendees: formData.maxAttendees ? parseInt(formData.maxAttendees) : undefined,
+        organizerId: "mock-organizer-id", // This should come from auth context
+        venue: formData.isOnline ? undefined : formData.venue,
+        onlineLink: formData.isOnline ? formData.onlineLink : undefined,
+        tags: tags,
+        isActive: true,
+        isPublished: formData.isPublic,
+      }
+
+      console.log("Creating event:", eventData)
+      
+      // Call the actual API
+      const response = await eventApi.createEvent(eventData, token)
+      
+      if (response.success) {
+        router.push("/dashboard/events?tab=hosting")
+      } else {
+        throw new Error("Failed to create event")
+      }
+    } catch (error) {
+      console.error("Failed to create event:", error)
+      alert("Failed to create event. Please try again.")
+    } finally {
       setIsLoading(false)
-      router.push("/dashboard/events?tab=hosting")
-    }, 2000)
+    }
   }
 
   return (

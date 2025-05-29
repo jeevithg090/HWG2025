@@ -28,8 +28,6 @@ import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useUser } from "@/lib/user-context"
 import { freelanceApi } from "@/lib/api-client"
-import { getAuthToken } from "@/lib/auth-utils"
-import { fetchProjects, fetchProposalsByFreelancerId } from "@/lib/dashboard-helpers"
 import { toast } from "sonner" 
 
 // Define types
@@ -162,44 +160,44 @@ export default function FreelancingPage() {
   
   // Fetch projects on component mount
   useEffect(() => {
-    const fetchProjectsAndProposals = async () => {
+    const fetchProjects = async () => {
       try {
-        const token = getAuthToken()
+        const token = localStorage.getItem('auth_token')
         if (!token || !user) {
           setIsLoading(false)
           return
         }
         
-        // Fetch all gigs using the dashboard helper
-        const gigsData = await fetchProjects()
-        if (gigsData && gigsData.length > 0) {
-          setGigs(gigsData)
+        // Fetch all gigs
+        const gigsResponse = await freelanceApi.getProjects({}, token)
+        if (gigsResponse.success && gigsResponse.data) {
+          setGigs(gigsResponse.data)
         }
         
-        // Fetch user's gigs if they're a client/startup
+        // Fetch user's gigs if they're a client
         if (isClient || isStartup) {
-          const clientGigsData = await fetchProjects({ clientId: user.id })
-          if (clientGigsData && clientGigsData.length > 0) {
-            setMyGigs(clientGigsData)
+          const clientGigsResponse = await freelanceApi.getProjects({ clientId: user.id }, token)
+          if (clientGigsResponse.success && clientGigsResponse.data) {
+            setMyGigs(clientGigsResponse.data)
           }
           
-          // Fetch proposals received for client gigs
-          // This would require specific endpoint support from the backend
-          // We would need to implement getProposalsForClientGigs in the API and helpers
+          // You can fetch proposals received for the client's gigs here
+          // const proposalsResponse = await...
         }
         
         // Fetch freelancer's proposals if they're a freelancer
-        if (isFreelancer && user.id) {
-          const myProposalsData = await fetchProposalsByFreelancerId(user.id)
-          if (myProposalsData && myProposalsData.length > 0) {
-            setProposals(myProposalsData)
-          }
+        if (isFreelancer) {
+          // Implementation depends on API endpoint
+          // const myProposalsResponse = await freelanceApi.getProposalsByFreelancerId(user.id, token)
+          // if (myProposalsResponse.success && myProposalsResponse.data) {
+          //   setProposals(myProposalsResponse.data)
+          // }
         }
         
         setIsLoading(false)
       } catch (error) {
-        console.error("Error fetching projects and proposals:", error)
-        toast.error("Failed to load data")
+        console.error("Error fetching projects:", error)
+        toast.error("Failed to load projects")
         setIsLoading(false)
       }
     }

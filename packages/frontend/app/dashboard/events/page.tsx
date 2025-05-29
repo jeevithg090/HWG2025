@@ -31,19 +31,143 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useUser } from "@/lib/user-context"
+import { useAuth } from "@/lib/auth-context"
+import { eventApi } from "@/lib/api-client"
 import { EventRegistrationModal } from "@/components/event-registration-modal"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 export default function EventsPage() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [isRegistrationModalOpen, setIsRegistrationModalOpen] = useState(false)
+  const [featuredEvents, setFeaturedEvents] = useState<any[]>([])
+  const [myEvents, setMyEvents] = useState<any[]>([])
+  const [registeredEvents, setRegisteredEvents] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Load events data on component mount
+  useEffect(() => {
+    loadEventsData()
+  }, [])
+
+  const loadEventsData = async () => {
+    setLoading(true)
+    try {
+      // Load featured/public events
+      const featuredResponse = await eventApi.getAllEvents({ 
+        isPublished: true, 
+        isActive: true,
+        limit: 10 
+      })
+      
+      if (featuredResponse.success) {
+        setFeaturedEvents(featuredResponse.data.events || featuredResponse.data || [])
+      }
+
+      // TODO: Load user's created events and registered events when auth is properly implemented
+      // For now, keeping some mock data as fallback
+      setMyEvents(mockMyEvents)
+      setRegisteredEvents(mockRegisteredEvents)
+      
+    } catch (error) {
+      console.error("Failed to load events:", error)
+      // Use mock data as fallback
+      setFeaturedEvents(mockFeaturedEvents)
+      setMyEvents(mockMyEvents)
+      setRegisteredEvents(mockRegisteredEvents)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleRegisterClick = (event: any) => {
     setSelectedEvent(event)
     setIsRegistrationModalOpen(true)
   }
 
-  const featuredEvents = [
+  const handleEventRegistration = async (data: any) => {
+    try {
+      const { user, token } = useAuth()
+      
+      if (!user || !token) {
+        throw new Error("Authentication required")
+      }
+
+      // Prepare registration data for the backend API
+      const registrationData = {
+        userId: user.id,
+        userEmail: data.email || user.email,
+        userName: data.name || user.name,
+        ticketType: data.ticketType,
+        comments: data.comments,
+        agreeToTerms: data.agreeToTerms,
+        subscribeToUpdates: data.subscribeToUpdates,
+      }
+
+      console.log("Registering for event:", selectedEvent?.id, registrationData)
+      
+      // Call the actual API
+      const response = await eventApi.registerForEvent(selectedEvent?.id, registrationData, token)
+      
+      if (!response.success) {
+        throw new Error("Failed to register for event")
+      }
+      
+      // Close modal after successful registration
+      setIsRegistrationModalOpen(false)
+      setSelectedEvent(null)
+      
+      // Reload events to reflect updated registration counts
+      loadEventsData()
+    } catch (error) {
+      console.error("Failed to register for event:", error)
+      throw error
+    }
+  }
+
+  const handleCancelRegistration = async (eventId: any) => {
+    try {
+      const { user, token } = useAuth()
+      if (!user || !token) {
+        throw new Error("Authentication required")
+      }
+      const response = await eventApi.cancelRegistration(eventId, user.id, token)
+      if (!response.success) {
+        throw new Error("Failed to cancel registration")
+      }
+      loadEventsData()
+    } catch (error) {
+      console.error("Failed to cancel registration:", error)
+    }
+  }
+
+  const handleBookmarkEvent = async (event: any) => {
+    try {
+      const { user, token } = useAuth()
+      if (!user || !token) {
+        throw new Error("Authentication required")
+      }
+      await eventApi.bookmarkEvent(event.id, user.id, token)
+      // Optionally show a toast or update UI
+    } catch (error) {
+      console.error("Failed to bookmark event:", error)
+    }
+  }
+
+  const handleShareEvent = (event: any) => {
+    if (navigator.share) {
+      navigator.share({
+        title: event.title,
+        text: event.description,
+        url: window.location.origin + `/events/${event.id}`,
+      })
+    } else {
+      navigator.clipboard.writeText(window.location.origin + `/events/${event.id}`)
+      // Optionally show a toast: "Event link copied!"
+    }
+  }
+
+  // Mock data as fallback
+  const mockFeaturedEvents = [
     {
       id: 1,
       title: "AI Innovation Hackathon 2024",
@@ -64,11 +188,11 @@ export default function EventsPage() {
     },
     {
       id: 2,
-      title: "React Advanced Patterns Workshop",
+      title: "React Masterclass Workshop",
       type: "workshop",
-      description: "Deep dive into advanced React patterns and performance optimization techniques.",
-      startDate: "March 20, 2024",
-      time: "2:00 PM - 6:00 PM",
+      description: "Deep dive into advanced React concepts and best practices.",
+      startDate: "March 22, 2024",
+      time: "10:00 AM - 4:00 PM",
       location: "Online",
       isOnline: true,
       registered: 89,
@@ -79,22 +203,41 @@ export default function EventsPage() {
       organizer: "React Masters",
       featured: true,
     },
+  ]
+
+  const mockMyEvents = [
     {
-      id: 3,
-      title: "Startup Pitch Night",
-      type: "networking",
-      description: "Monthly networking event where startups pitch their ideas to investors.",
-      startDate: "March 25, 2024",
-      time: "6:00 PM - 9:00 PM",
-      location: "New York, NY",
+      id: 7,
+      title: "Frontend Development Workshop",
+      type: "workshop",
+      description: "Hands-on workshop covering modern frontend development techniques.",
+      startDate: "March 20, 2024",
+      time: "2:00 PM - 5:00 PM",
+      location: "Online",
+      isOnline: true,
+      registered: 45,
+      maxAttendees: 50,
+      status: "upcoming",
+      revenue: 2250,
+    },
+  ]
+
+  const mockRegisteredEvents = [
+    {
+      id: 9,
+      title: "Machine Learning Conference 2024",
+      type: "conference",
+      description: "Annual conference featuring the latest in ML research and applications.",
+      startDate: "April 15, 2024",
+      time: "9:00 AM - 6:00 PM",
+      location: "Boston, MA",
       isOnline: false,
-      registered: 156,
-      maxAttendees: 200,
-      price: "$25",
-      image: "/placeholder.svg?height=200&width=400",
-      tags: ["Startup", "Networking", "Investment"],
-      organizer: "NYC Startup Hub",
-      featured: true,
+      registered: 567,
+      maxAttendees: 1000,
+      price: "$299",
+      tags: ["Machine Learning", "AI", "Data Science"],
+      organizer: "ML Society",
+      status: "confirmed",
     },
   ]
 
@@ -143,66 +286,6 @@ export default function EventsPage() {
       price: "$199",
       tags: ["DevOps", "Cloud", "Security"],
       organizer: "CloudSec Events",
-    },
-  ]
-
-  const myEvents = [
-    {
-      id: 7,
-      title: "Frontend Development Workshop",
-      type: "workshop",
-      description: "Hands-on workshop covering modern frontend development techniques.",
-      startDate: "March 20, 2024",
-      time: "2:00 PM - 5:00 PM",
-      location: "Online",
-      isOnline: true,
-      registered: 45,
-      maxAttendees: 50,
-      status: "upcoming",
-      revenue: 2250,
-    },
-    {
-      id: 8,
-      title: "JavaScript Fundamentals Bootcamp",
-      type: "bootcamp",
-      description: "3-day intensive bootcamp for JavaScript beginners.",
-      startDate: "February 15, 2024",
-      time: "9:00 AM - 5:00 PM",
-      location: "San Francisco, CA",
-      isOnline: false,
-      registered: 32,
-      maxAttendees: 30,
-      status: "completed",
-      revenue: 9600,
-    },
-  ]
-
-  const registeredEvents = [
-    {
-      id: 9,
-      title: "Machine Learning Conference 2024",
-      type: "conference",
-      description: "Annual conference featuring the latest in ML research and applications.",
-      startDate: "March 25, 2024",
-      time: "9:00 AM - 6:00 PM",
-      location: "New York, NY",
-      isOnline: false,
-      registrationDate: "February 10, 2024",
-      ticketType: "Regular",
-      price: "$299",
-    },
-    {
-      id: 10,
-      title: "Cybersecurity Webinar Series",
-      type: "webinar",
-      description: "Weekly webinar series covering cybersecurity best practices.",
-      startDate: "March 22, 2024",
-      time: "1:00 PM - 2:00 PM",
-      location: "Online",
-      isOnline: true,
-      registrationDate: "February 20, 2024",
-      ticketType: "Free",
-      price: "Free",
     },
   ]
 
@@ -341,7 +424,7 @@ export default function EventsPage() {
                       <Badge className="bg-white text-black">Featured</Badge>
                     </div>
                     <div className="absolute top-4 right-4">
-                      <Button variant="ghost" size="icon" className="text-white hover:bg-white/20">
+                      <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => handleBookmarkEvent(event)}>
                         <Bookmark className="h-4 w-4" />
                       </Button>
                     </div>
@@ -377,7 +460,7 @@ export default function EventsPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {event.tags.map((tag) => (
+                        {event.tags?.map((tag: string) => (
                           <Badge key={tag} variant="outline" className="text-xs">
                             {tag}
                           </Badge>
@@ -388,7 +471,7 @@ export default function EventsPage() {
                         <Button className="flex-1" onClick={() => handleRegisterClick(event)}>
                           {event.price === "Free" ? "Register Free" : `Register ${event.price}`}
                         </Button>
-                        <Button variant="outline" size="icon">
+                        <Button variant="outline" size="icon" onClick={() => handleShareEvent(event)}>
                           <Share className="h-4 w-4" />
                         </Button>
                       </div>
@@ -436,7 +519,7 @@ export default function EventsPage() {
                           </div>
                           <p className="text-sm text-muted-foreground">{event.description}</p>
                           <div className="flex flex-wrap gap-1 mt-2">
-                            {event.tags.map((tag) => (
+                            {event.tags?.map((tag: string) => (
                               <Badge key={tag} variant="outline" className="text-xs">
                                 {tag}
                               </Badge>
@@ -450,6 +533,9 @@ export default function EventsPage() {
                         </Button>
                         <Button size="sm" onClick={() => handleRegisterClick(event)}>
                           {event.price === "Free" ? "Register Free" : `Register ${event.price}`}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleShareEvent(event)}>
+                          <Share className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -488,7 +574,7 @@ export default function EventsPage() {
                         <ExternalLink className="h-4 w-4 mr-2" />
                         Event Details
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => handleCancelRegistration(event.id)}>
                         Cancel Registration
                       </Button>
                     </div>
@@ -704,6 +790,7 @@ export default function EventsPage() {
             setIsRegistrationModalOpen(false)
             setSelectedEvent(null)
           }}
+          onSubmit={handleEventRegistration}
           event={selectedEvent}
         />
       )}

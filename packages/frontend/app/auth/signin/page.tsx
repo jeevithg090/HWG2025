@@ -10,27 +10,45 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, Github, Chrome } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
+import { toast } from "sonner"
 
 export default function SignInPage() {
+  const { login, isLoading: authLoading, isAuthenticated } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard')
+    }
+  }, [isAuthenticated, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!email || !password) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+    
     setIsLoading(true)
-
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const success = await login(email, password)
+      if (success) {
+        toast.success('Login successful')
+        router.push('/dashboard')
+      }
+    } finally {
       setIsLoading(false)
-      // Redirect to dashboard on successful login
-      router.push("/dashboard")
-    }, 2000)
+    }
   }
 
   const handleSocialLogin = (provider: string) => {
