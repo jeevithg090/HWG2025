@@ -23,7 +23,7 @@ const config: Record<string, Config> = {
       username: process.env.DB_USERNAME || "postgres",
       password: process.env.DB_PASSWORD || "postgres",
       database: process.env.DB_DATABASE || "freelance_service_db",
-      synchronize: false,
+      synchronize: true,
       logging: true,
     },
   },
@@ -35,7 +35,7 @@ const config: Record<string, Config> = {
       username: process.env.DB_USERNAME || "postgres",
       password: process.env.DB_PASSWORD || "postgres",
       database: process.env.DB_DATABASE || "freelance_service_db",
-      synchronize: false, // Don't auto-synchronize in production
+      synchronize: true, // Don't auto-synchronize in production
       logging: false,
     },
   },
@@ -47,7 +47,7 @@ const config: Record<string, Config> = {
       username: process.env.DB_USERNAME || "postgres",
       password: process.env.DB_PASSWORD || "postgres",
       database: process.env.DB_DATABASE || "freelance_service_test_db",
-      synchronize: false,
+      synchronize: true,
       logging: false,
     },
   },

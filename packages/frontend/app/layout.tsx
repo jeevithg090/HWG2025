@@ -1,3 +1,4 @@
+
 import type React from "react";
 import type { Metadata } from "next";
 import "./globals.css";
@@ -20,10 +21,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={"font-sans"}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
+        <ThemeProvider 
+          attribute="class" 
+          defaultTheme="system" 
+          enableSystem 
           disableTransitionOnChange
         >
           <AuthProvider>
