@@ -68,7 +68,6 @@ Then to run the repository, run following command in the source directory (the o
 
 ```bash
 docker compose up -d
-
 ```
 In case something breaks, use following command to take down all the containers and images and volume and re-run above command again
 
@@ -79,7 +78,13 @@ docker rmi -f $(docker images -q)
 docker system prune -a --volumes -f
 ```
 
+To run frontend
 
+```bash
+cd packages/frontend
+npm run build
+npm run start
+```
 
 
 ### Contributors

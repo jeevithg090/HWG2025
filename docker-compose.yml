@@ -75,22 +75,27 @@ services:
       - postgres
       - user-service
 
-  frontend:
-    build: ./packages/frontend
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env
-    environment:
-      NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
-      NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL}
-      NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
-      USER_SERVICE_URL: http://user-service:4000/auth/validate
-    depends_on:
-      - postgres
-      - user-service
-      - freelance-service
-      - event-service
+  # frontend:
+  #   build:
+  #     context: ./packages/frontend
+  #     args:
+  #       NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
+  #       NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL}
+  #       NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
+  #   ports:
+  #     - "3000:3000"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
+  #     NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL}
+  #     NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
+  #     USER_SERVICE_URL: http://user-service:4000/auth/validate
+  #   depends_on:
+  #     - postgres
+  #     - user-service
+  #     - freelance-service
+  #     - event-service
 
 volumes:
   pgdata:

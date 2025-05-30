@@ -1,6 +1,10 @@
 # Stage 1: Build the application
 FROM node:20-alpine AS builder
 
+ARG NEXT_PUBLIC_USER_SERVICE_URL
+ARG NEXT_PUBLIC_EVENT_SERVICE_URL
+ARG NEXT_PUBLIC_FREELANCE_SERVICE_URL
+
 # Install dependencies only when needed
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -12,6 +16,12 @@ RUN npm i --legacy-peer-deps
 
 # Copy the rest of your application code
 COPY . .
+
+# Set the environment variables for the build process
+# These will be baked into the Next.js bundle
+ENV NEXT_PUBLIC_USER_SERVICE_URL=${NEXT_PUBLIC_USER_SERVICE_URL}
+ENV NEXT_PUBLIC_EVENT_SERVICE_URL=${NEXT_PUBLIC_EVENT_SERVICE_URL}
+ENV NEXT_PUBLIC_FREELANCE_SERVICE_URL=${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
 
 # Build the Next.js application
 # `output: "standalone"` in next.config.js is highly recommended for Docker
