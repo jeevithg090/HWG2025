@@ -76,6 +76,7 @@ In case something breaks, use following command to take down all the containers 
 docker rm -f $(docker ps -aq)
 docker rmi -f $(docker images -q)
 docker system prune -a --volumes -f
+docker volume rm -f $(docker volume ls -q)
 ```
 
 To run frontend
