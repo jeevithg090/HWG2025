@@ -1,8 +1,27 @@
+# Runs the whole platform: Postgres, the three APIs and the web app.
+#   cp .env.example .env   # then edit the secrets
+#   docker compose up --build
+
+x-backend: &backend
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  environment: &backend-env
+    NODE_ENV: production
+    DB_HOST: postgres
+    DB_PORT: 5432
+    DB_USERNAME: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+    DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    DB_DATABASE: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    DB_SYNCHRONIZE: "true"
+    JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+
 services:
   postgres:
-    image: postgres:15
-    container_name: postgres
-    restart: always
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -15,87 +34,50 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 5
-    # networks: # Assign to custom network
-    #   - my-app-network
+      retries: 10
 
   user-service:
+    <<: *backend
     build: ./packages/user-service
     ports:
       - "4000:4000"
-    env_file:
-      - .env
     environment:
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_DATABASE: ${DB_DATABASE}
-      TOKEN_KEY: ${TOKEN_KEY}
-      NODE_ENV: ${NODE_ENV}
-      PORT: ${USER_SERVICE_PORT}
-    depends_on:
-      - postgres
+      <<: *backend-env
+      PORT: 4000
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
 
   freelance-service:
+    <<: *backend
     build: ./packages/freelance-service
     ports:
       - "4001:4001"
-    env_file:
-      - .env
     environment:
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_DATABASE: ${DB_DATABASE}
-      NODE_ENV: ${NODE_ENV}
-      PORT: ${FREELANCE_SERVICE_PORT}
-      USER_SERVICE_URL: http://user-service:4000/auth/validate
-    depends_on:
-      - postgres
-      - user-service
+      <<: *backend-env
+      PORT: 4001
 
   event-service:
+    <<: *backend
     build: ./packages/event-service
     ports:
       - "4002:4002"
-    env_file:
-      - .env
     environment:
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_DATABASE: ${DB_DATABASE}
-      NODE_ENV: ${NODE_ENV}
-      PORT: ${EVENT_SERVICE_PORT}
-      USER_SERVICE_URL: http://user-service:4000/auth/validate
-    depends_on:
-      - postgres
-      - user-service
+      <<: *backend-env
+      PORT: 4002
 
-  # frontend:
-  #   build:
-  #     context: ./packages/frontend
-  #     args:
-  #       NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
-  #       NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL}
-  #       NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
-  #   ports:
-  #     - "3000:3000"
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
-  #     NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL}
-  #     NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
-  #     USER_SERVICE_URL: http://user-service:4000/auth/validate
-  #   depends_on:
-  #     - postgres
-  #     - user-service
-  #     - freelance-service
-  #     - event-service
+  frontend:
+    build:
+      context: ./packages/frontend
+      args:
+        NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL:-http://localhost:4000}
+        NEXT_PUBLIC_FREELANCE_SERVICE_URL: ${NEXT_PUBLIC_FREELANCE_SERVICE_URL:-http://localhost:4001}
+        NEXT_PUBLIC_EVENT_SERVICE_URL: ${NEXT_PUBLIC_EVENT_SERVICE_URL:-http://localhost:4002}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - user-service
+      - freelance-service
+      - event-service
 
 volumes:
   pgdata:
