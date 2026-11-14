@@ -20,4 +20,6 @@ export const paginate = <T>(
 });
 
 export const average = (values: number[]): number | null =>
-  values.length ? Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 100) / 100 : null;
+  values.length
+    ? Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 100) / 100
+    : null;

@@ -39,8 +39,7 @@ export class ProposalService {
   async get(user: AuthUser, id: string): Promise<Proposal> {
     const proposal = await this.findOrFail(id);
     const gig = await this.gigs.findById(proposal.gigId);
-    const allowed =
-      proposal.freelancerId === user.id || gig?.clientId === user.id || isAdmin(user);
+    const allowed = proposal.freelancerId === user.id || gig?.clientId === user.id || isAdmin(user);
     if (!allowed) throw AppError.forbidden();
     return proposal;
   }

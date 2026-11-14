@@ -3,12 +3,7 @@ import { dataSource } from "../database/database";
 import { Gig } from "../models/gig";
 import { Proposal } from "../models/proposal";
 import { Review } from "../models/review";
-import {
-  GigRepository,
-  ProposalRepository,
-  Repositories,
-  ReviewRepository,
-} from "./types";
+import { GigRepository, ProposalRepository, Repositories, ReviewRepository } from "./types";
 
 const gigs = () => dataSource.getRepository(Gig);
 const proposals = () => dataSource.getRepository(Proposal);

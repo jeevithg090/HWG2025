@@ -42,12 +42,7 @@ export const notFoundHandler = (req: Request, res: Response) => {
 };
 
 // Express recognises error handlers by their arity, so `_next` must stay.
-export const errorHandler = (
-  err: unknown,
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-) => {
+export const errorHandler = (err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof ZodError) {
     res.status(400).json({
       success: false,
