@@ -1,179 +1,199 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import type React from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { useAuth } from "./auth-context";
+import { getInitials } from "./format";
 
 // Mock WebSocket implementation for demo purposes
 // In production, you'd use actual WebSocket or Socket.io
+type Listener = (data: unknown) => void;
+
 class MockWebSocket {
-  private listeners: { [key: string]: Function[] } = {}
-  private isConnected = false
+  private listeners: { [key: string]: Listener[] } = {};
+  private connectTimer: ReturnType<typeof setTimeout>;
 
-  constructor(url: string) {
+  constructor() {
     // Simulate connection
-    setTimeout(() => {
-      this.isConnected = true
-      this.emit("connect", {})
-    }, 1000)
+    this.connectTimer = setTimeout(() => {
+      this.emit("connect", {});
+    }, 1000);
   }
 
-  on(event: string, callback: Function) {
+  on(event: string, callback: Listener) {
     if (!this.listeners[event]) {
-      this.listeners[event] = []
+      this.listeners[event] = [];
     }
-    this.listeners[event].push(callback)
+    this.listeners[event].push(callback);
   }
 
-  emit(event: string, data: any) {
+  emit(event: string, data: unknown) {
     if (this.listeners[event]) {
-      this.listeners[event].forEach((callback) => callback(data))
+      this.listeners[event].forEach((callback) => callback(data));
     }
   }
 
-  send(data: any) {
+  send(data: unknown) {
     // Simulate sending message
     setTimeout(() => {
-      this.emit("message", data)
-    }, 100)
+      this.emit("message", data);
+    }, 100);
   }
 
   disconnect() {
-    this.isConnected = false
+    clearTimeout(this.connectTimer);
+    this.listeners = {};
   }
 }
 
 interface Message {
-  id: string
-  content: string
-  senderId: string
-  senderName: string
-  senderAvatar?: string
-  timestamp: Date
-  type: "text" | "image" | "file" | "announcement"
-  edited?: boolean
-  reactions?: { [emoji: string]: string[] }
-  replyTo?: string
-  channelId?: string
-  groupId?: string
+  id: string;
+  content: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  timestamp: Date;
+  type: "text" | "image" | "file" | "announcement";
+  edited?: boolean;
+  reactions?: { [emoji: string]: string[] };
+  replyTo?: string;
+  channelId?: string;
+  groupId?: string;
 }
 
 interface ChatGroup {
-  id: string
-  name: string
-  description?: string
-  type: "public" | "private"
-  avatar?: string
-  members: string[]
-  admins: string[]
-  createdAt: Date
-  lastMessage?: Message
-  unreadCount: number
-  category?: string
+  id: string;
+  name: string;
+  description?: string;
+  type: "public" | "private";
+  avatar?: string;
+  members: string[];
+  admins: string[];
+  createdAt: Date;
+  lastMessage?: Message;
+  unreadCount: number;
+  category?: string;
 }
 
 interface DirectMessage {
-  id: string
-  participants: string[]
-  lastMessage?: Message
-  unreadCount: number
-  createdAt: Date
+  id: string;
+  participants: string[];
+  lastMessage?: Message;
+  unreadCount: number;
+  createdAt: Date;
 }
 
 interface User {
-  id: string
-  name: string
-  avatar?: string
-  status: "online" | "away" | "offline"
-  lastSeen?: Date
+  id: string;
+  name: string;
+  avatar?: string;
+  status: "online" | "away" | "offline";
+  lastSeen?: Date;
 }
 
 interface ChatContextType {
   // Connection
-  isConnected: boolean
+  isConnected: boolean;
 
   // Messages
-  messages: { [channelId: string]: Message[] }
-  sendMessage: (content: string, channelId: string, type?: string) => void
-  editMessage: (messageId: string, content: string) => void
-  deleteMessage: (messageId: string) => void
-  addReaction: (messageId: string, emoji: string) => void
+  messages: { [channelId: string]: Message[] };
+  sendMessage: (content: string, channelId: string, type?: Message["type"]) => void;
+  editMessage: (messageId: string, content: string) => void;
+  deleteMessage: (messageId: string) => void;
+  addReaction: (messageId: string, emoji: string) => void;
 
   // Groups
-  groups: ChatGroup[]
-  joinGroup: (groupId: string) => void
-  leaveGroup: (groupId: string) => void
-  createGroup: (name: string, description: string, type: "public" | "private") => void
+  groups: ChatGroup[];
+  joinGroup: (groupId: string) => void;
+  leaveGroup: (groupId: string) => void;
+  createGroup: (name: string, description: string, type: "public" | "private") => void;
 
   // Direct Messages
-  directMessages: DirectMessage[]
-  startDirectMessage: (userId: string) => string
+  directMessages: DirectMessage[];
+  startDirectMessage: (userId: string) => string;
 
   // Users
-  users: { [id: string]: User }
-  currentUser: User | null
+  users: { [id: string]: User };
+  currentUser: User | null;
 
   // Active channel
-  activeChannel: string | null
-  setActiveChannel: (channelId: string) => void
+  activeChannel: string | null;
+  setActiveChannel: (channelId: string) => void;
 
   // Typing indicators
-  typingUsers: { [channelId: string]: string[] }
-  setTyping: (channelId: string, isTyping: boolean) => void
+  typingUsers: { [channelId: string]: string[] };
+  setTyping: (channelId: string, isTyping: boolean) => void;
 }
 
-const ChatContext = createContext<ChatContextType | null>(null)
+const ChatContext = createContext<ChatContextType | null>(null);
 
 export function useChatContext() {
-  const context = useContext(ChatContext)
+  const context = useContext(ChatContext);
   if (!context) {
-    throw new Error("useChatContext must be used within a ChatProvider")
+    throw new Error("useChatContext must be used within a ChatProvider");
   }
-  return context
+  return context;
 }
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const [socket, setSocket] = useState<MockWebSocket | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
-  const [messages, setMessages] = useState<{ [channelId: string]: Message[] }>({})
-  const [groups, setGroups] = useState<ChatGroup[]>([])
-  const [directMessages, setDirectMessages] = useState<DirectMessage[]>([])
-  const [users, setUsers] = useState<{ [id: string]: User }>({})
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [activeChannel, setActiveChannel] = useState<string | null>(null)
-  const [typingUsers, setTypingUsers] = useState<{ [channelId: string]: string[] }>({})
+  const [socket, setSocket] = useState<MockWebSocket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [messages, setMessages] = useState<{ [channelId: string]: Message[] }>({});
+  const [groups, setGroups] = useState<ChatGroup[]>([]);
+  const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
+  const [users, setUsers] = useState<{ [id: string]: User }>({});
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeChannel, setActiveChannel] = useState<string | null>(null);
+  const [typingUsers, setTypingUsers] = useState<{ [channelId: string]: string[] }>({});
+  const { user: authUser } = useAuth();
+  const authName = authUser?.name;
+
+  // Show the signed-in user's name in the demo chat instead of a placeholder.
+  useEffect(() => {
+    if (!authName) return;
+    const profile = { name: authName, avatar: getInitials(authName) };
+    setCurrentUser((prev) => (prev ? { ...prev, ...profile } : prev));
+    setUsers((prev) =>
+      prev["current-user"]
+        ? { ...prev, "current-user": { ...prev["current-user"], ...profile } }
+        : prev,
+    );
+  }, [authName, currentUser?.id]);
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const ws = new MockWebSocket("ws://localhost:3001")
-    setSocket(ws)
+    const ws = new MockWebSocket();
+    setSocket(ws);
 
     ws.on("connect", () => {
-      setIsConnected(true)
-    })
+      setIsConnected(true);
+    });
 
-    ws.on("message", (data: any) => {
-      if (data.type === "new_message") {
+    ws.on("message", (raw) => {
+      const data = raw as { type?: string; channelId?: string; message?: Message };
+      if (data.type === "new_message" && data.channelId && data.message) {
+        const { channelId, message } = data;
         setMessages((prev) => ({
           ...prev,
-          [data.channelId]: [...(prev[data.channelId] || []), data.message],
-        }))
+          [channelId]: [...(prev[channelId] || []), message],
+        }));
       }
-    })
+    });
 
-    ws.on("user_typing", (data: any) => {
-      setTypingUsers((prev) => ({
-        ...prev,
-        [data.channelId]: data.users,
-      }))
-    })
+    ws.on("user_typing", (raw) => {
+      const data = raw as { channelId?: string; users?: string[] };
+      if (!data.channelId) return;
+      const { channelId, users = [] } = data;
+      setTypingUsers((prev) => ({ ...prev, [channelId]: users }));
+    });
 
     // Initialize mock data
-    initializeMockData()
+    initializeMockData();
 
     return () => {
-      ws.disconnect()
-    }
-  }, [])
+      ws.disconnect();
+    };
+  }, []);
 
   const initializeMockData = () => {
     // Mock current user
@@ -182,8 +202,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       name: "John Doe",
       avatar: "JD",
       status: "online",
-    }
-    setCurrentUser(mockCurrentUser)
+    };
+    setCurrentUser(mockCurrentUser);
 
     // Mock users
     const mockUsers: { [id: string]: User } = {
@@ -207,8 +227,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         status: "offline",
         lastSeen: new Date(Date.now() - 3600000),
       },
-    }
-    setUsers(mockUsers)
+    };
+    setUsers(mockUsers);
 
     // Mock groups
     const mockGroups: ChatGroup[] = [
@@ -245,8 +265,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         unreadCount: 0,
         category: "projects",
       },
-    ]
-    setGroups(mockGroups)
+    ];
+    setGroups(mockGroups);
 
     // Mock direct messages
     const mockDMs: DirectMessage[] = [
@@ -262,8 +282,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         unreadCount: 0,
         createdAt: new Date(),
       },
-    ]
-    setDirectMessages(mockDMs)
+    ];
+    setDirectMessages(mockDMs);
 
     // Mock messages
     const mockMessages: { [channelId: string]: Message[] } = {
@@ -317,13 +337,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           type: "text",
         },
       ],
-    }
-    setMessages(mockMessages)
-  }
+    };
+    setMessages(mockMessages);
+  };
 
   const sendMessage = useCallback(
-    (content: string, channelId: string, type = "text") => {
-      if (!currentUser || !socket) return
+    (content: string, channelId: string, type: Message["type"] = "text") => {
+      if (!currentUser || !socket) return;
 
       const message: Message = {
         id: Date.now().toString(),
@@ -332,105 +352,109 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         senderName: currentUser.name,
         senderAvatar: currentUser.avatar,
         timestamp: new Date(),
-        type: type as any,
-      }
+        type,
+      };
 
       setMessages((prev) => ({
         ...prev,
         [channelId]: [...(prev[channelId] || []), message],
-      }))
+      }));
 
       // Simulate sending to server
       socket.send({
         type: "send_message",
         channelId,
         message,
-      })
+      });
     },
     [currentUser, socket],
-  )
+  );
 
   const editMessage = useCallback((messageId: string, content: string) => {
     setMessages((prev) => {
-      const newMessages = { ...prev }
+      const newMessages = { ...prev };
       Object.keys(newMessages).forEach((channelId) => {
         newMessages[channelId] = newMessages[channelId].map((msg) =>
           msg.id === messageId ? { ...msg, content, edited: true } : msg,
-        )
-      })
-      return newMessages
-    })
-  }, [])
+        );
+      });
+      return newMessages;
+    });
+  }, []);
 
   const deleteMessage = useCallback((messageId: string) => {
     setMessages((prev) => {
-      const newMessages = { ...prev }
+      const newMessages = { ...prev };
       Object.keys(newMessages).forEach((channelId) => {
-        newMessages[channelId] = newMessages[channelId].filter((msg) => msg.id !== messageId)
-      })
-      return newMessages
-    })
-  }, [])
+        newMessages[channelId] = newMessages[channelId].filter((msg) => msg.id !== messageId);
+      });
+      return newMessages;
+    });
+  }, []);
 
   const addReaction = useCallback(
     (messageId: string, emoji: string) => {
-      if (!currentUser) return
+      if (!currentUser) return;
 
       setMessages((prev) => {
-        const newMessages = { ...prev }
+        const newMessages = { ...prev };
         Object.keys(newMessages).forEach((channelId) => {
           newMessages[channelId] = newMessages[channelId].map((msg) => {
             if (msg.id === messageId) {
-              const reactions = { ...msg.reactions }
+              const reactions = { ...msg.reactions };
               if (!reactions[emoji]) {
-                reactions[emoji] = []
+                reactions[emoji] = [];
               }
               if (reactions[emoji].includes(currentUser.id)) {
-                reactions[emoji] = reactions[emoji].filter((id) => id !== currentUser.id)
+                reactions[emoji] = reactions[emoji].filter((id) => id !== currentUser.id);
                 if (reactions[emoji].length === 0) {
-                  delete reactions[emoji]
+                  delete reactions[emoji];
                 }
               } else {
-                reactions[emoji].push(currentUser.id)
+                reactions[emoji].push(currentUser.id);
               }
-              return { ...msg, reactions }
+              return { ...msg, reactions };
             }
-            return msg
-          })
-        })
-        return newMessages
-      })
+            return msg;
+          });
+        });
+        return newMessages;
+      });
     },
     [currentUser],
-  )
+  );
 
   const joinGroup = useCallback(
     (groupId: string) => {
-      if (!currentUser) return
-
-      setGroups((prev) =>
-        prev.map((group) => (group.id === groupId ? { ...group, members: [...group.members, currentUser.id] } : group)),
-      )
-    },
-    [currentUser],
-  )
-
-  const leaveGroup = useCallback(
-    (groupId: string) => {
-      if (!currentUser) return
+      if (!currentUser) return;
 
       setGroups((prev) =>
         prev.map((group) =>
-          group.id === groupId ? { ...group, members: group.members.filter((id) => id !== currentUser.id) } : group,
+          group.id === groupId ? { ...group, members: [...group.members, currentUser.id] } : group,
         ),
-      )
+      );
     },
     [currentUser],
-  )
+  );
+
+  const leaveGroup = useCallback(
+    (groupId: string) => {
+      if (!currentUser) return;
+
+      setGroups((prev) =>
+        prev.map((group) =>
+          group.id === groupId
+            ? { ...group, members: group.members.filter((id) => id !== currentUser.id) }
+            : group,
+        ),
+      );
+    },
+    [currentUser],
+  );
 
   const createGroup = useCallback(
     (name: string, description: string, type: "public" | "private") => {
-      if (!currentUser) return
+      if (!currentUser) return;
 
       const newGroup: ChatGroup = {
         id: Date.now().toString(),
@@ -441,23 +465,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         admins: [currentUser.id],
         createdAt: new Date(),
         unreadCount: 0,
-      }
+      };
 
-      setGroups((prev) => [...prev, newGroup])
+      setGroups((prev) => [...prev, newGroup]);
     },
     [currentUser],
-  )
+  );
 
   const startDirectMessage = useCallback(
     (userId: string): string => {
-      if (!currentUser) return ""
+      if (!currentUser) return "";
 
       const existingDM = directMessages.find(
         (dm) => dm.participants.includes(currentUser.id) && dm.participants.includes(userId),
-      )
+      );
 
       if (existingDM) {
-        return existingDM.id
+        return existingDM.id;
       }
 
       const newDM: DirectMessage = {
@@ -465,27 +489,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         participants: [currentUser.id, userId],
         unreadCount: 0,
         createdAt: new Date(),
-      }
+      };
 
-      setDirectMessages((prev) => [...prev, newDM])
-      return newDM.id
+      setDirectMessages((prev) => [...prev, newDM]);
+      return newDM.id;
     },
     [currentUser, directMessages],
-  )
+  );
 
   const setTyping = useCallback(
     (channelId: string, isTyping: boolean) => {
-      if (!currentUser || !socket) return
+      if (!currentUser || !socket) return;
 
       socket.send({
         type: "typing",
         channelId,
         userId: currentUser.id,
         isTyping,
-      })
+      });
     },
     [currentUser, socket],
-  )
+  );
 
   const value: ChatContextType = {
     isConnected,
@@ -506,7 +530,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setActiveChannel,
     typingUsers,
     setTyping,
-  }
+  };
 
-  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }

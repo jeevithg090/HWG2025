@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -17,11 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,44 +31,60 @@ import {
 import { cn } from "@/lib/utils";
 import { CalendarIcon, ChevronLeft } from "lucide-react";
 import { Header } from "@/components/header";
-import { useAuth } from '@/lib/auth-context';
-import { eventApi } from '@/lib/api-client';
-import { toast } from 'sonner';
+import { useAuth } from "@/lib/auth-context";
+import { eventApi } from "@/lib/api-client";
+import { parseList } from "@/lib/format";
+import { EVENT_TYPES } from "@/lib/types";
+import type { CreateEventPayload, EventType } from "@/lib/types";
+import { toast } from "sonner";
 
-// Define form schema
-const formSchema = z.object({
-  title: z.string().min(5, {
-    message: "Title must be at least 5 characters.",
-  }),
-  description: z.string().min(20, {
-    message: "Description must be at least 20 characters.",
-  }),
-  startDateTime: z.date({
-    required_error: "Start date and time is required.",
-  }),
-  endDateTime: z.date().optional(),
-  venue: z.string().optional(),
-  onlineLink: z.string().url().optional().or(z.literal('')),
-  eventType: z.string({
-    required_error: "Please select an event type.",
-  }),
-  isActive: z.boolean().default(true),
-  isPublished: z.boolean().default(false),
-  maxAttendees: z.string().optional().transform(val => 
-    val === '' ? undefined : parseInt(val, 10)
-  ),
-  tags: z.string().optional().transform(val => 
-    val === '' ? [] : val.split(',').map(tag => tag.trim())
-  ),
-});
+/** Returns a copy of `date` with the "HH:mm" time applied (unchanged if invalid). */
+function withTime(date: Date, time: string): Date {
+  const [hours, minutes] = time.split(":").map((part) => Number.parseInt(part, 10));
+  const next = new Date(date);
+  if (Number.isFinite(hours) && Number.isFinite(minutes)) next.setHours(hours, minutes, 0, 0);
+  return next;
+}
+
+/** Picking a new day in the calendar keeps the time already chosen. */
+function mergeDayKeepTime(day: Date | undefined, previous: Date | undefined): Date | undefined {
+  if (!day || !previous) return day;
+  const next = new Date(day);
+  next.setHours(previous.getHours(), previous.getMinutes(), 0, 0);
+  return next;
+}
+
+const EVENT_TYPE_VALUES = EVENT_TYPES as [EventType, ...EventType[]];
+
+const formSchema = z
+  .object({
+    title: z.string().trim().min(5, { message: "Title must be at least 5 characters." }),
+    description: z
+      .string()
+      .trim()
+      .min(20, { message: "Description must be at least 20 characters." }),
+    startDateTime: z.date({ error: "Start date and time is required." }),
+    endDateTime: z.date().optional(),
+    venue: z.string(),
+    onlineLink: z.union([z.literal(""), z.url({ message: "Enter a valid URL." })]),
+    eventType: z.enum(EVENT_TYPE_VALUES, { error: "Please select an event type." }),
+    isPublished: z.boolean(),
+    maxAttendees: z.string().regex(/^\d*$/, { message: "Enter a whole number." }),
+    tags: z.string(),
+  })
+  .refine((values) => !values.endDateTime || values.endDateTime > values.startDateTime, {
+    message: "End must be after the start.",
+    path: ["endDateTime"],
+  });
+
+type FormValues = z.infer<typeof formSchema>;
 
 export default function CreateEventPage() {
   const router = useRouter();
-  const { token, isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [submitting, setSubmitting] = useState(false);
 
-  // Initialize form
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: "",
@@ -80,57 +92,61 @@ export default function CreateEventPage() {
       venue: "",
       onlineLink: "",
       eventType: "MEETUP",
-      isActive: true,
-      isPublished: false,
+      isPublished: true,
+      maxAttendees: "",
       tags: "",
     },
   });
 
-  // Handle form submission
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!isAuthenticated) {
-      toast.error('Please login to create events');
-      router.push('/auth');
-      return;
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      toast.error("Please sign in to create events");
+      router.replace("/auth/signin");
     }
+  }, [isLoading, isAuthenticated, router]);
+
+  const onSubmit = async (values: FormValues) => {
+    const maxAttendees = values.maxAttendees ? Number.parseInt(values.maxAttendees, 10) : undefined;
+    const payload: CreateEventPayload = {
+      title: values.title,
+      description: values.description,
+      startDateTime: values.startDateTime.toISOString(),
+      endDateTime: values.endDateTime?.toISOString(),
+      venue: values.venue.trim() || undefined,
+      onlineLink: values.onlineLink || undefined,
+      eventType: values.eventType,
+      isPublished: values.isPublished,
+      maxAttendees: maxAttendees && maxAttendees > 0 ? maxAttendees : undefined,
+      tags: parseList(values.tags),
+    };
 
     setSubmitting(true);
-    try {
-      // Format the event data
-      const eventData = {
-        ...values,
-        organizerId: user?.id,
-        currentAttendees: 0,
-      };
-      
-      const response = await eventApi.createEvent(eventData, token);
-      
-      if (response.success) {
-        toast.success('Event created successfully!');
-        router.push(`/events/${response.event.id}`);
-      } else {
-        toast.error('Failed to create event');
-      }
-    } catch (error) {
-      console.error('Failed to create event:', error);
-      toast.error('Failed to create event');
-    } finally {
-      setSubmitting(false);
+    const response = await eventApi.createEvent(payload);
+    setSubmitting(false);
+
+    if (response.success) {
+      toast.success("Event created successfully!");
+      router.push(response.event?.id ? `/events/${response.event.id}` : "/events");
+    } else if (response.status === 401) {
+      toast.error("Your session has expired. Please sign in again.");
+      router.push("/auth/signin");
+    } else {
+      toast.error(response.message || "Failed to create event");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <Header />
-      
+
       <div className="container mx-auto px-4 py-8">
-        <Button variant="ghost" onClick={() => router.push('/events')} className="mb-6">
-          <ChevronLeft className="mr-2 h-4 w-4" /> Back to Events
+        <Button variant="ghost" onClick={() => router.push("/events")} className="mb-6">
+          <ChevronLeft className="mr-2 h-4 w-4" aria-hidden="true" /> Back to Events
         </Button>
-        
+
         <div className="max-w-3xl mx-auto">
           <h1 className="text-3xl font-bold mb-6">Create New Event</h1>
-          
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               <FormField
@@ -142,14 +158,12 @@ export default function CreateEventPage() {
                     <FormControl>
                       <Input placeholder="E.g., Tech Meetup 2025" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      A catchy title for your event.
-                    </FormDescription>
+                    <FormDescription>A catchy title for your event.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="description"
@@ -157,10 +171,10 @@ export default function CreateEventPage() {
                   <FormItem>
                     <FormLabel>Event Description</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Describe your event in detail..." 
+                      <Textarea
+                        placeholder="Describe your event in detail..."
                         className="min-h-32"
-                        {...field} 
+                        {...field}
                       />
                     </FormControl>
                     <FormDescription>
@@ -170,7 +184,7 @@ export default function CreateEventPage() {
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -185,7 +199,7 @@ export default function CreateEventPage() {
                               variant={"outline"}
                               className={cn(
                                 "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
+                                !field.value && "text-muted-foreground",
                               )}
                             >
                               {field.value ? (
@@ -201,18 +215,16 @@ export default function CreateEventPage() {
                           <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={field.onChange}
+                            onSelect={(day) => field.onChange(mergeDayKeepTime(day, field.value))}
                             initialFocus
                           />
                           <div className="p-3 border-t border-border">
                             <Input
                               type="time"
-                              onChange={(e) => {
-                                const date = new Date(field.value || new Date());
-                                const [hours, minutes] = e.target.value.split(':');
-                                date.setHours(parseInt(hours), parseInt(minutes));
-                                field.onChange(date);
-                              }}
+                              aria-label="Start time"
+                              onChange={(e) =>
+                                field.onChange(withTime(field.value ?? new Date(), e.target.value))
+                              }
                               defaultValue={field.value ? format(field.value, "HH:mm") : ""}
                             />
                           </div>
@@ -222,7 +234,7 @@ export default function CreateEventPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="endDateTime"
@@ -236,7 +248,7 @@ export default function CreateEventPage() {
                               variant={"outline"}
                               className={cn(
                                 "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
+                                !field.value && "text-muted-foreground",
                               )}
                             >
                               {field.value ? (
@@ -252,18 +264,16 @@ export default function CreateEventPage() {
                           <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={field.onChange}
+                            onSelect={(day) => field.onChange(mergeDayKeepTime(day, field.value))}
                             initialFocus
                           />
                           <div className="p-3 border-t border-border">
                             <Input
                               type="time"
+                              aria-label="End time"
                               onChange={(e) => {
-                                if (!field.value) return;
-                                const date = new Date(field.value);
-                                const [hours, minutes] = e.target.value.split(':');
-                                date.setHours(parseInt(hours), parseInt(minutes));
-                                field.onChange(date);
+                                if (field.value)
+                                  field.onChange(withTime(field.value, e.target.value));
                               }}
                               defaultValue={field.value ? format(field.value, "HH:mm") : ""}
                             />
@@ -275,7 +285,7 @@ export default function CreateEventPage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -293,7 +303,7 @@ export default function CreateEventPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="onlineLink"
@@ -311,7 +321,7 @@ export default function CreateEventPage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -338,7 +348,7 @@ export default function CreateEventPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="maxAttendees"
@@ -346,22 +356,20 @@ export default function CreateEventPage() {
                     <FormItem>
                       <FormLabel>Maximum Attendees (Optional)</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
+                        <Input
+                          type="number"
                           placeholder="Leave blank for unlimited"
                           min="1"
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Limit the number of attendees.
-                      </FormDescription>
+                      <FormDescription>Limit the number of attendees.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              
+
               <FormField
                 control={form.control}
                 name="tags"
@@ -369,10 +377,7 @@ export default function CreateEventPage() {
                   <FormItem>
                     <FormLabel>Tags (Optional)</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="E.g., technology, coding, web3" 
-                        {...field}
-                      />
+                      <Input placeholder="E.g., technology, coding, web3" {...field} />
                     </FormControl>
                     <FormDescription>
                       Comma-separated list of tags to help categorize your event.
@@ -381,29 +386,8 @@ export default function CreateEventPage() {
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="isActive"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Active</FormLabel>
-                        <FormDescription>
-                          Is this event currently active?
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-                
                 <FormField
                   control={form.control}
                   name="isPublished"
@@ -412,26 +396,24 @@ export default function CreateEventPage() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={field.onChange}
+                          onCheckedChange={(checked) => field.onChange(checked === true)}
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
                         <FormLabel>Publish</FormLabel>
-                        <FormDescription>
-                          Make this event visible to the public.
-                        </FormDescription>
+                        <FormDescription>Make this event visible to the public.</FormDescription>
                       </div>
                     </FormItem>
                   )}
                 />
               </div>
-              
+
               <div className="flex justify-end gap-4">
-                <Button type="button" variant="outline" onClick={() => router.push('/events')}>
+                <Button type="button" variant="outline" onClick={() => router.push("/events")}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={submitting}>
-                  {submitting ? 'Creating...' : 'Create Event'}
+                  {submitting ? "Creating..." : "Create Event"}
                 </Button>
               </div>
             </form>

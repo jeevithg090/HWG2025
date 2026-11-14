@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -17,11 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -34,42 +30,58 @@ import {
 import { cn } from "@/lib/utils";
 import { CalendarIcon, ChevronLeft } from "lucide-react";
 import { Header } from "@/components/header";
-import { useAuth } from '@/lib/auth-context';
-import { freelanceApi } from '@/lib/api-client';
-import { toast } from 'sonner';
+import { useAuth } from "@/lib/auth-context";
+import { freelanceApi } from "@/lib/api-client";
+import { parseList } from "@/lib/format";
+import type { CreateGigPayload } from "@/lib/types";
+import { toast } from "sonner";
 
-// Define form schema
+const PROJECT_TYPE_LABELS: Record<string, string> = {
+  WEB_DEVELOPMENT: "Web Development",
+  MOBILE_APP: "Mobile App Development",
+  UI_UX_DESIGN: "UI/UX Design",
+  DATA_SCIENCE: "Data Science & Analytics",
+  CONTENT_WRITING: "Content Writing",
+  BLOCKCHAIN: "Blockchain & Web3",
+  AI_ML: "AI & Machine Learning",
+  OTHER: "Other",
+};
+
+const EXPERIENCE_LABELS: Record<string, string> = {
+  ENTRY: "Entry Level",
+  INTERMEDIATE: "Intermediate",
+  EXPERT: "Expert",
+};
+
 const formSchema = z.object({
-  title: z.string().min(5, {
-    message: "Title must be at least 5 characters.",
+  title: z
+    .string()
+    .trim()
+    .min(5, { message: "Title must be at least 5 characters." })
+    .max(100, { message: "Title cannot exceed 100 characters." }),
+  description: z
+    .string()
+    .trim()
+    .min(20, { message: "Description must be at least 20 characters." }),
+  projectType: z.string().min(1, { message: "Please select a project type." }),
+  budget: z.string().refine((value) => value === "" || Number(value) > 0, {
+    message: "Budget must be a positive number.",
   }),
-  description: z.string().min(20, {
-    message: "Description must be at least 20 characters.",
-  }),
-  projectType: z.string({
-    required_error: "Please select a project type.",
-  }),
-  budget: z.string().optional().transform(val => 
-    val === '' ? undefined : parseFloat(val)
-  ),
   deadline: z.date().optional(),
-  estimatedDuration: z.string().optional(),
-  skills: z.string().transform(val => 
-    val.split(',').map(skill => skill.trim()).filter(Boolean)
-  ),
-  experienceLevel: z.string({
-    required_error: "Please select the required experience level.",
-  }),
-  attachments: z.any().optional(),
+  estimatedDuration: z.string(),
+  skills: z.string(),
+  experienceLevel: z.string().min(1, { message: "Please select the required experience level." }),
 });
+
+type FormValues = z.infer<typeof formSchema>;
 
 export default function CreateProjectPage() {
   const router = useRouter();
-  const { token, isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
+  const canPostGigs = user?.type === "client" || user?.type === "startup" || user?.type === "admin";
 
-  // Initialize form
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: "",
@@ -82,52 +94,66 @@ export default function CreateProjectPage() {
     },
   });
 
-  // Handle form submission
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!isAuthenticated) {
-      toast.error('Please login to create projects');
-      router.push('/auth');
-      return;
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      toast.error("Please sign in to create projects");
+      router.replace("/auth/signin");
     }
+  }, [isLoading, isAuthenticated, router]);
+
+  const onSubmit = async (values: FormValues) => {
+    const details = [
+      `Project type: ${PROJECT_TYPE_LABELS[values.projectType] ?? values.projectType}`,
+      `Experience level: ${EXPERIENCE_LABELS[values.experienceLevel] ?? values.experienceLevel}`,
+      values.estimatedDuration.trim() && `Estimated duration: ${values.estimatedDuration.trim()}`,
+    ].filter(Boolean);
+
+    const payload: CreateGigPayload = {
+      title: values.title,
+      description: `${values.description}\n\n${details.join("\n")}`,
+      budget: values.budget ? Number(values.budget) : undefined,
+      requiredSkills: parseList(values.skills),
+      deadline: values.deadline?.toISOString(),
+    };
 
     setSubmitting(true);
-    try {
-      // Format the project data
-      const projectData = {
-        ...values,
-        clientId: user?.id,
-        status: 'open',
-        createdAt: new Date().toISOString(),
-      };
-      
-      const response = await freelanceApi.createProject(projectData, token);
-      
-      if (response.success) {
-        toast.success('Project created successfully!');
-        router.push(`/freelance/projects/${response.data.id}`);
-      } else {
-        toast.error('Failed to create project');
-      }
-    } catch (error) {
-      console.error('Failed to create project:', error);
-      toast.error('Failed to create project');
-    } finally {
-      setSubmitting(false);
+    const response = await freelanceApi.createProject(payload);
+    setSubmitting(false);
+
+    if (response.success) {
+      toast.success("Project created successfully!");
+      router.push(response.data?.id ? `/freelance/projects/${response.data.id}` : "/freelance");
+    } else if (response.status === 403) {
+      toast.error("Only client and startup accounts can post projects.");
+    } else if (response.status === 401) {
+      toast.error("Your session has expired. Please sign in again.");
+      router.push("/auth/signin");
+    } else {
+      toast.error(response.message || "Failed to create project");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <Header />
-      
+
       <div className="container mx-auto px-4 py-8">
-        <Button variant="ghost" onClick={() => router.push('/freelance/projects')} className="mb-6">
-          <ChevronLeft className="mr-2 h-4 w-4" /> Back to Projects
+        <Button variant="ghost" onClick={() => router.push("/freelance")} className="mb-6">
+          <ChevronLeft className="mr-2 h-4 w-4" aria-hidden="true" /> Back to Projects
         </Button>
-        
+
         <div className="max-w-3xl mx-auto">
           <h1 className="text-3xl font-bold mb-6">Post a New Project</h1>
-          
+          {user && !canPostGigs && (
+            <p
+              role="alert"
+              className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+            >
+              Only client and startup accounts can post projects. Browse the marketplace to find
+              work instead.
+            </p>
+          )}
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               <FormField
@@ -139,14 +165,12 @@ export default function CreateProjectPage() {
                     <FormControl>
                       <Input placeholder="E.g., Web Developer for E-commerce Site" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      A clear title that describes your project.
-                    </FormDescription>
+                    <FormDescription>A clear title that describes your project.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="description"
@@ -154,10 +178,10 @@ export default function CreateProjectPage() {
                   <FormItem>
                     <FormLabel>Project Description</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Describe your project in detail..." 
+                      <Textarea
+                        placeholder="Describe your project in detail..."
                         className="min-h-32"
-                        {...field} 
+                        {...field}
                       />
                     </FormControl>
                     <FormDescription>
@@ -167,7 +191,7 @@ export default function CreateProjectPage() {
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -196,7 +220,7 @@ export default function CreateProjectPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="budget"
@@ -204,22 +228,15 @@ export default function CreateProjectPage() {
                     <FormItem>
                       <FormLabel>Budget (USD, Optional)</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="E.g., 500"
-                          min="0"
-                          {...field}
-                        />
+                        <Input type="number" placeholder="E.g., 500" min="0" {...field} />
                       </FormControl>
-                      <FormDescription>
-                        Your estimated budget for this project.
-                      </FormDescription>
+                      <FormDescription>Your estimated budget for this project.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              
+
               <div className="grid md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -234,7 +251,7 @@ export default function CreateProjectPage() {
                               variant={"outline"}
                               className={cn(
                                 "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
+                                !field.value && "text-muted-foreground",
                               )}
                             >
                               {field.value ? (
@@ -263,7 +280,7 @@ export default function CreateProjectPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="estimatedDuration"
@@ -281,7 +298,7 @@ export default function CreateProjectPage() {
                   )}
                 />
               </div>
-              
+
               <FormField
                 control={form.control}
                 name="skills"
@@ -289,10 +306,7 @@ export default function CreateProjectPage() {
                   <FormItem>
                     <FormLabel>Required Skills</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="E.g., React, Node.js, UI/UX, Python" 
-                        {...field}
-                      />
+                      <Input placeholder="E.g., React, Node.js, UI/UX, Python" {...field} />
                     </FormControl>
                     <FormDescription>
                       Comma-separated list of skills required for this project.
@@ -301,7 +315,7 @@ export default function CreateProjectPage() {
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="experienceLevel"
@@ -327,13 +341,13 @@ export default function CreateProjectPage() {
                   </FormItem>
                 )}
               />
-              
+
               <div className="flex justify-end gap-4">
-                <Button type="button" variant="outline" onClick={() => router.push('/freelance/projects')}>
+                <Button type="button" variant="outline" onClick={() => router.push("/freelance")}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? 'Posting...' : 'Post Project'}
+                <Button type="submit" disabled={submitting || (!!user && !canPostGigs)}>
+                  {submitting ? "Posting..." : "Post Project"}
                 </Button>
               </div>
             </form>

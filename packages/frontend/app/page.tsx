@@ -1,9 +1,18 @@
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { ArrowRight, Calendar, Briefcase, MessageCircle, Star, Zap, Shield, Globe } from "lucide-react"
-import Link from "next/link"
-import { Header } from "@/components/header"
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  ArrowRight,
+  Calendar,
+  Briefcase,
+  MessageCircle,
+  Star,
+  Zap,
+  Shield,
+  Globe,
+} from "lucide-react";
+import Link from "next/link";
+import { Header } from "@/components/header";
 
 export default function LandingPage() {
   return (
@@ -20,8 +29,8 @@ export default function LandingPage() {
             Connect. Collaborate. Create.
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            The all-in-one platform where freelancers find gigs, communities thrive, and tech events come to life. Stop
-            juggling multiple tools and start building the future together.
+            The all-in-one platform where freelancers find gigs, communities thrive, and tech events
+            come to life. Stop juggling multiple tools and start building the future together.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" className="text-lg px-8" asChild>
@@ -29,8 +38,8 @@ export default function LandingPage() {
                 Get Started Free <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" className="text-lg px-8">
-              Watch Demo
+            <Button size="lg" variant="outline" className="text-lg px-8" asChild>
+              <Link href="/events">Explore Events</Link>
             </Button>
           </div>
         </div>
@@ -51,8 +60,8 @@ export default function LandingPage() {
               <Briefcase className="h-12 w-12 text-blue-600 mb-4" />
               <CardTitle>Freelancing Marketplace</CardTitle>
               <CardDescription>
-                Connect with top tech talent or find your next gig. Post projects, submit proposals, and manage
-                everything in one place.
+                Connect with top tech talent or find your next gig. Post projects, submit proposals,
+                and manage everything in one place.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -70,8 +79,8 @@ export default function LandingPage() {
               <Calendar className="h-12 w-12 text-purple-600 mb-4" />
               <CardTitle>Event Management</CardTitle>
               <CardDescription>
-                Organize hackathons, webinars, and meetups. Manage registrations, send updates, and build your tech
-                community.
+                Organize hackathons, webinars, and meetups. Manage registrations, send updates, and
+                build your tech community.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -89,8 +98,8 @@ export default function LandingPage() {
               <MessageCircle className="h-12 w-12 text-green-600 mb-4" />
               <CardTitle>Real-time Community</CardTitle>
               <CardDescription>
-                Build thriving communities with real-time chat, groups, and networking tools. Connect instantly with
-                like-minded developers.
+                Build thriving communities with real-time chat, groups, and networking tools.
+                Connect instantly with like-minded developers.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -139,12 +148,16 @@ export default function LandingPage() {
           <div className="text-center">
             <Zap className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
             <h3 className="font-semibold mb-2">Lightning Fast</h3>
-            <p className="text-sm text-muted-foreground">Real-time updates and instant notifications</p>
+            <p className="text-sm text-muted-foreground">
+              Real-time updates and instant notifications
+            </p>
           </div>
           <div className="text-center">
             <Shield className="h-12 w-12 text-blue-500 mx-auto mb-4" />
             <h3 className="font-semibold mb-2">Secure & Trusted</h3>
-            <p className="text-sm text-muted-foreground">Bank-level security for all transactions</p>
+            <p className="text-sm text-muted-foreground">
+              Bank-level security for all transactions
+            </p>
           </div>
           <div className="text-center">
             <Globe className="h-12 w-12 text-green-500 mx-auto mb-4" />
@@ -154,7 +167,9 @@ export default function LandingPage() {
           <div className="text-center">
             <Star className="h-12 w-12 text-purple-500 mx-auto mb-4" />
             <h3 className="font-semibold mb-2">Top Quality</h3>
-            <p className="text-sm text-muted-foreground">Vetted professionals and verified reviews</p>
+            <p className="text-sm text-muted-foreground">
+              Vetted professionals and verified reviews
+            </p>
           </div>
         </div>
       </section>
@@ -216,5 +231,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

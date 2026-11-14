@@ -1,13 +1,13 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Upload,
   ImageIcon,
@@ -16,120 +16,135 @@ import {
   Music,
   Download,
   Eye,
-  Share,
   Trash,
   LinkIcon,
-  Camera,
-  Mic,
   FileText,
   Archive,
   Code,
-} from "lucide-react"
+} from "lucide-react";
 
 interface MediaFile {
-  id: string
-  name: string
-  type: string
-  size: number
-  url: string
-  uploadedAt: Date
-  uploadedBy: string
-  description?: string
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+  uploadedAt: Date;
+  uploadedBy: string;
+  description?: string;
 }
 
 interface MediaSharingProps {
-  channelId: string
-  onFileUpload: (file: MediaFile) => void
+  channelId: string;
+  onFileUpload: (file: MediaFile) => void;
 }
 
 export function MediaSharing({ channelId, onFileUpload }: MediaSharingProps) {
-  const [files, setFiles] = useState<MediaFile[]>([])
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [dragOver, setDragOver] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [files, setFiles] = useState<MediaFile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const idCounter = useRef(0);
+  const filesRef = useRef<MediaFile[]>([]);
+  filesRef.current = files;
+
+  // Release object URLs created for previews when the component unmounts.
+  useEffect(() => {
+    return () => {
+      filesRef.current.forEach((file) => URL.revokeObjectURL(file.url));
+    };
+  }, []);
+
+  const removeFile = (fileId: string) => {
+    setFiles((prev) => {
+      const target = prev.find((file) => file.id === fileId);
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((file) => file.id !== fileId);
+    });
+  };
 
   const handleFileSelect = (selectedFiles: FileList | null) => {
-    if (!selectedFiles) return
+    if (!selectedFiles) return;
 
     Array.from(selectedFiles).forEach((file) => {
-      simulateUpload(file)
-    })
-  }
+      simulateUpload(file);
+    });
+  };
 
   const simulateUpload = (file: File) => {
-    setUploading(true)
-    setUploadProgress(0)
+    setUploading(true);
+    setUploadProgress(0);
 
     // Simulate upload progress
     const interval = setInterval(() => {
       setUploadProgress((prev) => {
         if (prev >= 100) {
-          clearInterval(interval)
-          setUploading(false)
+          clearInterval(interval);
+          setUploading(false);
 
           // Add file to list
           const newFile: MediaFile = {
-            id: Date.now().toString(),
+            id: `${channelId}-${Date.now()}-${idCounter.current++}`,
             name: file.name,
             type: file.type,
             size: file.size,
             url: URL.createObjectURL(file),
             uploadedAt: new Date(),
             uploadedBy: "Current User",
-          }
+          };
 
-          setFiles((prev) => [...prev, newFile])
-          onFileUpload(newFile)
-          return 0
+          setFiles((prev) => [...prev, newFile]);
+          onFileUpload(newFile);
+          return 0;
         }
-        return prev + 10
-      })
-    }, 200)
-  }
+        return prev + 10;
+      });
+    }, 200);
+  };
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    handleFileSelect(e.dataTransfer.files)
-  }
+    e.preventDefault();
+    setDragOver(false);
+    handleFileSelect(e.dataTransfer.files);
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(true)
-  }
+    e.preventDefault();
+    setDragOver(true);
+  };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-  }
+    e.preventDefault();
+    setDragOver(false);
+  };
 
   const getFileIcon = (type: string) => {
-    if (type.startsWith("image/")) return <Image className="h-4 w-4" />
-    if (type.startsWith("video/")) return <Video className="h-4 w-4" />
-    if (type.startsWith("audio/")) return <Music className="h-4 w-4" />
-    if (type.includes("pdf")) return <FileText className="h-4 w-4" />
-    if (type.includes("zip") || type.includes("rar")) return <Archive className="h-4 w-4" />
+    if (type.startsWith("image/")) return <ImageIcon className="h-4 w-4" aria-hidden="true" />;
+    if (type.startsWith("video/")) return <Video className="h-4 w-4" />;
+    if (type.startsWith("audio/")) return <Music className="h-4 w-4" />;
+    if (type.includes("pdf")) return <FileText className="h-4 w-4" />;
+    if (type.includes("zip") || type.includes("rar")) return <Archive className="h-4 w-4" />;
     if (type.includes("javascript") || type.includes("typescript") || type.includes("json"))
-      return <Code className="h-4 w-4" />
-    return <File className="h-4 w-4" />
-  }
+      return <Code className="h-4 w-4" />;
+    return <File className="h-4 w-4" />;
+  };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
   const getFileTypeColor = (type: string) => {
-    if (type.startsWith("image/")) return "bg-green-100 text-green-800"
-    if (type.startsWith("video/")) return "bg-purple-100 text-purple-800"
-    if (type.startsWith("audio/")) return "bg-blue-100 text-blue-800"
-    if (type.includes("pdf")) return "bg-red-100 text-red-800"
-    return "bg-gray-100 text-gray-800"
-  }
+    if (type.startsWith("image/")) return "bg-green-100 text-green-800";
+    if (type.startsWith("video/")) return "bg-purple-100 text-purple-800";
+    if (type.startsWith("audio/")) return "bg-blue-100 text-blue-800";
+    if (type.includes("pdf")) return "bg-red-100 text-red-800";
+    return "bg-gray-100 text-gray-800";
+  };
 
   return (
     <div className="space-y-6">
@@ -154,20 +169,19 @@ export function MediaSharing({ channelId, onFileUpload }: MediaSharingProps) {
           >
             <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Upload Files</h3>
-            <p className="text-muted-foreground mb-4">Drag and drop files here, or click to browse</p>
+            <p className="text-muted-foreground mb-4">
+              Drag and drop files here, or click to browse
+            </p>
 
             <div className="flex flex-wrap gap-2 justify-center mb-4">
-              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="gap-2"
+              >
                 <File className="h-4 w-4" />
                 Browse Files
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Camera className="h-4 w-4" />
-                Take Photo
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Mic className="h-4 w-4" />
-                Record Audio
               </Button>
             </div>
 
@@ -180,6 +194,7 @@ export function MediaSharing({ channelId, onFileUpload }: MediaSharingProps) {
               type="file"
               multiple
               className="hidden"
+              aria-label="Choose files to upload"
               onChange={(e) => handleFileSelect(e.target.files)}
               accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip,.rar,.json,.js,.ts,.jsx,.tsx"
             />
@@ -220,11 +235,9 @@ export function MediaSharing({ channelId, onFileUpload }: MediaSharingProps) {
 
                   {file.type.startsWith("image/") && (
                     <div className="aspect-video bg-muted rounded overflow-hidden">
-                      <ImageIcon
-                        src={file.url || "/placeholder.svg"}
-                        alt={file.name}
-                        className="w-full h-full object-cover"
-                      />
+                      {/* Local blob: preview, so next/image optimization does not apply. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
                     </div>
                   )}
 
@@ -234,19 +247,26 @@ export function MediaSharing({ channelId, onFileUpload }: MediaSharingProps) {
                   </div>
 
                   <div className="flex gap-1">
-                    <Button variant="outline" size="sm" className="flex-1 gap-1">
-                      <Eye className="h-3 w-3" />
-                      View
+                    <Button variant="outline" size="sm" className="flex-1 gap-1" asChild>
+                      <a href={file.url} target="_blank" rel="noopener noreferrer">
+                        <Eye className="h-3 w-3" aria-hidden="true" />
+                        View
+                      </a>
                     </Button>
-                    <Button variant="outline" size="sm" className="flex-1 gap-1">
-                      <Download className="h-3 w-3" />
-                      Download
+                    <Button variant="outline" size="sm" className="flex-1 gap-1" asChild>
+                      <a href={file.url} download={file.name}>
+                        <Download className="h-3 w-3" aria-hidden="true" />
+                        Download
+                      </a>
                     </Button>
-                    <Button variant="outline" size="sm" className="gap-1">
-                      <Share className="h-3 w-3" />
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1 text-red-600">
-                      <Trash className="h-3 w-3" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-red-600"
+                      onClick={() => removeFile(file.id)}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <Trash className="h-3 w-3" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -266,7 +286,11 @@ export function MediaSharing({ channelId, onFileUpload }: MediaSharingProps) {
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
-            <Input placeholder="Paste a link to share..." className="flex-1" />
+            <Input
+              placeholder="Paste a link to share..."
+              aria-label="Link to share"
+              className="flex-1"
+            />
             <Button>Share Link</Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
@@ -275,5 +299,5 @@ export function MediaSharing({ channelId, onFileUpload }: MediaSharingProps) {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

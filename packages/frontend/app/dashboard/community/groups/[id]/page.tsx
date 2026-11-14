@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft,
   Users,
@@ -32,13 +32,20 @@ import {
   MessageSquare,
   Calendar,
   FileText,
-} from "lucide-react"
-import Link from "next/link"
-import { useState } from "react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+} from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-export default function GroupManagementPage({ params }: { params: { id: string } }) {
-  const [searchTerm, setSearchTerm] = useState("")
+export default function GroupManagementPage() {
+  const params = useParams<{ id: string }>();
+  const [searchTerm, setSearchTerm] = useState("");
   const [groupSettings, setGroupSettings] = useState({
     name: "Frontend Developers",
     description: "Discussion about frontend technologies and best practices",
@@ -51,7 +58,7 @@ export default function GroupManagementPage({ params }: { params: { id: string }
     slowModeDelay: 5,
     notifications: true,
     mentionEveryone: false,
-  })
+  });
 
   // Mock group data
   const group = {
@@ -65,7 +72,7 @@ export default function GroupManagementPage({ params }: { params: { id: string }
     createdAt: new Date("2023-01-15"),
     category: "Development",
     tags: ["React", "Vue", "Angular", "JavaScript", "CSS"],
-  }
+  };
 
   const members = [
     {
@@ -118,12 +125,13 @@ export default function GroupManagementPage({ params }: { params: { id: string }
       lastActive: new Date(),
       messageCount: 156,
     },
-  ]
+  ];
 
   const pinnedMessages = [
     {
       id: "1",
-      content: "Welcome to the Frontend Developers group! Please read our guidelines before posting.",
+      content:
+        "Welcome to the Frontend Developers group! Please read our guidelines before posting.",
       author: "Alice Johnson",
       timestamp: new Date("2023-01-15"),
       type: "announcement",
@@ -142,7 +150,7 @@ export default function GroupManagementPage({ params }: { params: { id: string }
       timestamp: new Date("2023-11-15"),
       type: "event",
     },
-  ]
+  ];
 
   const recentActivity = [
     {
@@ -172,9 +180,11 @@ export default function GroupManagementPage({ params }: { params: { id: string }
       change: "Enabled slow mode",
       timestamp: new Date(Date.now() - 172800000),
     },
-  ]
+  ];
 
-  const filteredMembers = members.filter((member) => member.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredMembers = members.filter((member) =>
+    member.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -184,39 +194,42 @@ export default function GroupManagementPage({ params }: { params: { id: string }
             <Crown className="h-3 w-3 mr-1" />
             Admin
           </Badge>
-        )
+        );
       case "moderator":
         return (
           <Badge className="bg-blue-100 text-blue-800">
             <Shield className="h-3 w-3 mr-1" />
             Moderator
           </Badge>
-        )
+        );
       default:
-        return <Badge variant="secondary">Member</Badge>
+        return <Badge variant="secondary">Member</Badge>;
     }
-  }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "online":
-        return "bg-green-500"
+        return "bg-green-500";
       case "away":
-        return "bg-yellow-500"
+        return "bg-yellow-500";
       default:
-        return "bg-gray-400"
+        return "bg-gray-400";
     }
-  }
+  };
 
-  const handleSettingChange = (key: string, value: any) => {
-    setGroupSettings((prev) => ({ ...prev, [key]: value }))
-  }
+  const handleSettingChange = <K extends keyof typeof groupSettings>(
+    key: K,
+    value: (typeof groupSettings)[K],
+  ) => {
+    setGroupSettings((prev) => ({ ...prev, [key]: value }));
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center space-x-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/community">
+          <Link href="/dashboard/community" aria-label="Back to community">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -286,13 +299,15 @@ export default function GroupManagementPage({ params }: { params: { id: string }
             <div className="text-2xl font-bold">
               {Math.floor((Date.now() - group.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30))}mo
             </div>
-            <p className="text-xs text-muted-foreground">Created {group.createdAt.toLocaleDateString()}</p>
+            <p className="text-xs text-muted-foreground">
+              Created {group.createdAt.toLocaleDateString()}
+            </p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="members" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="moderation">Moderation</TabsTrigger>
@@ -323,6 +338,7 @@ export default function GroupManagementPage({ params }: { params: { id: string }
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
+                    aria-label="Search members"
                     placeholder="Search members..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -337,7 +353,10 @@ export default function GroupManagementPage({ params }: { params: { id: string }
 
               <div className="space-y-4">
                 {filteredMembers.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-4 border rounded-lg"
+                  >
                     <div className="flex items-center space-x-4">
                       <div className="relative">
                         <Avatar className="h-12 w-12">
@@ -362,7 +381,7 @@ export default function GroupManagementPage({ params }: { params: { id: string }
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label="More options">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -401,7 +420,7 @@ export default function GroupManagementPage({ params }: { params: { id: string }
           <Card>
             <CardHeader>
               <CardTitle>Group Information</CardTitle>
-              <CardDescription>Update your group's basic information</CardDescription>
+              <CardDescription>Update your group&apos;s basic information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -454,7 +473,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Allow member invites</p>
-                  <p className="text-sm text-muted-foreground">Let members invite others to the group</p>
+                  <p className="text-sm text-muted-foreground">
+                    Let members invite others to the group
+                  </p>
                 </div>
                 <Switch
                   checked={groupSettings.allowMemberInvites}
@@ -464,7 +485,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Require approval for new members</p>
-                  <p className="text-sm text-muted-foreground">Admins must approve new member requests</p>
+                  <p className="text-sm text-muted-foreground">
+                    Admins must approve new member requests
+                  </p>
                 </div>
                 <Switch
                   checked={groupSettings.requireApproval}
@@ -474,7 +497,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Allow file uploads</p>
-                  <p className="text-sm text-muted-foreground">Members can upload files and images</p>
+                  <p className="text-sm text-muted-foreground">
+                    Members can upload files and images
+                  </p>
                 </div>
                 <Switch
                   checked={groupSettings.allowFileUploads}
@@ -503,7 +528,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Slow mode</p>
-                  <p className="text-sm text-muted-foreground">Limit how often members can send messages</p>
+                  <p className="text-sm text-muted-foreground">
+                    Limit how often members can send messages
+                  </p>
                 </div>
                 <Switch
                   checked={groupSettings.slowMode}
@@ -517,7 +544,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
                     id="slowModeDelay"
                     type="number"
                     value={groupSettings.slowModeDelay}
-                    onChange={(e) => handleSettingChange("slowModeDelay", Number.parseInt(e.target.value))}
+                    onChange={(e) =>
+                      handleSettingChange("slowModeDelay", Number.parseInt(e.target.value))
+                    }
                     min="1"
                     max="300"
                   />
@@ -526,7 +555,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Allow @everyone mentions</p>
-                  <p className="text-sm text-muted-foreground">Members can mention all group members</p>
+                  <p className="text-sm text-muted-foreground">
+                    Members can mention all group members
+                  </p>
                 </div>
                 <Switch
                   checked={groupSettings.mentionEveryone}
@@ -552,7 +583,10 @@ export default function GroupManagementPage({ params }: { params: { id: string }
             <CardContent>
               <div className="space-y-4">
                 {pinnedMessages.map((message) => (
-                  <div key={message.id} className="flex items-start justify-between p-4 border rounded-lg">
+                  <div
+                    key={message.id}
+                    className="flex items-start justify-between p-4 border rounded-lg"
+                  >
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <Badge variant={message.type === "announcement" ? "default" : "secondary"}>
@@ -566,7 +600,7 @@ export default function GroupManagementPage({ params }: { params: { id: string }
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label="More options">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -664,7 +698,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
                         </Avatar>
                         <span className="text-sm font-medium">{member.name}</span>
                       </div>
-                      <span className="text-sm text-muted-foreground">{member.messageCount} messages</span>
+                      <span className="text-sm text-muted-foreground">
+                        {member.messageCount} messages
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -710,7 +746,10 @@ export default function GroupManagementPage({ params }: { params: { id: string }
             <CardContent>
               <div className="space-y-4">
                 {recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-center space-x-4 p-3 border rounded-lg">
+                  <div
+                    key={activity.id}
+                    className="flex items-center space-x-4 p-3 border rounded-lg"
+                  >
                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                     <div className="flex-1">
                       <p className="text-sm">
@@ -721,12 +760,14 @@ export default function GroupManagementPage({ params }: { params: { id: string }
                         )}
                         {activity.type === "message_pinned" && (
                           <>
-                            <span className="font-medium">{activity.user}</span> pinned a message: "{activity.content}"
+                            <span className="font-medium">{activity.user}</span> pinned a message:
+                            &ldquo;{activity.content}&rdquo;
                           </>
                         )}
                         {activity.type === "member_promoted" && (
                           <>
-                            <span className="font-medium">{activity.user}</span> was promoted to {activity.role}
+                            <span className="font-medium">{activity.user}</span> was promoted to{" "}
+                            {activity.role}
                           </>
                         )}
                         {activity.type === "settings_changed" && (
@@ -735,7 +776,9 @@ export default function GroupManagementPage({ params }: { params: { id: string }
                           </>
                         )}
                       </p>
-                      <p className="text-xs text-muted-foreground">{activity.timestamp.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {activity.timestamp.toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -745,5 +788,5 @@ export default function GroupManagementPage({ params }: { params: { id: string }
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

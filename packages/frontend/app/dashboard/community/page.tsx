@@ -1,14 +1,19 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   MessageCircle,
   Users,
@@ -36,10 +41,9 @@ import {
   Gift,
   Bell,
   Zap,
-} from "lucide-react"
-import { useState, useRef, useEffect } from "react"
-import { useChatContext } from "@/lib/chat-context"
-import { ChatProvider } from "@/lib/chat-context"
+} from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { useChatContext } from "@/lib/chat-context";
 
 function CommunityContent() {
   const {
@@ -57,117 +61,116 @@ function CommunityContent() {
     setTyping,
     startDirectMessage,
     createGroup,
-    joinGroup,
     leaveGroup,
-  } = useChatContext()
+  } = useChatContext();
 
-  const [message, setMessage] = useState("")
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [showCreateGroup, setShowCreateGroup] = useState(false)
-  const [newGroupName, setNewGroupName] = useState("")
-  const [newGroupDescription, setNewGroupDescription] = useState("")
-  const [newGroupType, setNewGroupType] = useState<"public" | "private">("public")
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedTab, setSelectedTab] = useState("groups")
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const typingTimeoutRef = useRef<NodeJS.Timeout>()
+  const [message, setMessage] = useState("");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDescription, setNewGroupDescription] = useState("");
+  const [newGroupType, setNewGroupType] = useState<"public" | "private">("public");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedTab, setSelectedTab] = useState("groups");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages, activeChannel])
+    scrollToBottom();
+  }, [messages, activeChannel]);
 
   const handleSendMessage = () => {
-    if (!message.trim() || !activeChannel) return
+    if (!message.trim() || !activeChannel) return;
 
-    sendMessage(message, activeChannel)
-    setMessage("")
+    sendMessage(message, activeChannel);
+    setMessage("");
 
     // Clear typing indicator
     if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current)
+      clearTimeout(typingTimeoutRef.current);
     }
-    setTyping(activeChannel, false)
-  }
+    setTyping(activeChannel, false);
+  };
 
   const handleTyping = (value: string) => {
-    setMessage(value)
+    setMessage(value);
 
-    if (!activeChannel) return
+    if (!activeChannel) return;
 
     // Set typing indicator
-    setTyping(activeChannel, true)
+    setTyping(activeChannel, true);
 
     // Clear previous timeout
     if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current)
+      clearTimeout(typingTimeoutRef.current);
     }
 
     // Clear typing after 3 seconds of inactivity
     typingTimeoutRef.current = setTimeout(() => {
-      setTyping(activeChannel, false)
-    }, 3000)
-  }
+      setTyping(activeChannel, false);
+    }, 3000);
+  };
 
   const handleCreateGroup = () => {
-    if (!newGroupName.trim()) return
+    if (!newGroupName.trim()) return;
 
-    createGroup(newGroupName, newGroupDescription, newGroupType)
-    setNewGroupName("")
-    setNewGroupDescription("")
-    setShowCreateGroup(false)
-  }
+    createGroup(newGroupName, newGroupDescription, newGroupType);
+    setNewGroupName("");
+    setNewGroupDescription("");
+    setShowCreateGroup(false);
+  };
 
   const handleStartDM = (userId: string) => {
-    const dmId = startDirectMessage(userId)
-    setActiveChannel(dmId)
-    setSelectedTab("dms")
-  }
+    const dmId = startDirectMessage(userId);
+    setActiveChannel(dmId);
+    setSelectedTab("dms");
+  };
 
   const getChannelName = (channelId: string) => {
-    const group = groups.find((g) => g.id === channelId)
-    if (group) return group.name
+    const group = groups.find((g) => g.id === channelId);
+    if (group) return group.name;
 
-    const dm = directMessages.find((d) => d.id === channelId)
+    const dm = directMessages.find((d) => d.id === channelId);
     if (dm && currentUser) {
-      const otherUserId = dm.participants.find((id) => id !== currentUser.id)
-      const otherUser = users[otherUserId || ""]
-      return otherUser?.name || "Unknown User"
+      const otherUserId = dm.participants.find((id) => id !== currentUser.id);
+      const otherUser = users[otherUserId || ""];
+      return otherUser?.name || "Unknown User";
     }
 
-    return "Unknown Channel"
-  }
+    return "Unknown Channel";
+  };
 
   const getChannelType = (channelId: string) => {
-    const group = groups.find((g) => g.id === channelId)
-    if (group) return "group"
+    const group = groups.find((g) => g.id === channelId);
+    if (group) return "group";
 
-    const dm = directMessages.find((d) => d.id === channelId)
-    if (dm) return "dm"
+    const dm = directMessages.find((d) => d.id === channelId);
+    if (dm) return "dm";
 
-    return "unknown"
-  }
+    return "unknown";
+  };
 
-  const currentMessages = activeChannel ? messages[activeChannel] || [] : []
-  const currentTypingUsers = activeChannel ? typingUsers[activeChannel] || [] : []
+  const currentMessages = activeChannel ? messages[activeChannel] || [] : [];
+  const currentTypingUsers = activeChannel ? typingUsers[activeChannel] || [] : [];
 
   const filteredGroups = groups.filter(
     (group) =>
       group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       group.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  );
 
   const filteredDMs = directMessages.filter((dm) => {
-    if (!currentUser) return false
-    const otherUserId = dm.participants.find((id) => id !== currentUser.id)
-    const otherUser = users[otherUserId || ""]
-    return otherUser?.name.toLowerCase().includes(searchTerm.toLowerCase())
-  })
+    if (!currentUser) return false;
+    const otherUserId = dm.participants.find((id) => id !== currentUser.id);
+    const otherUser = users[otherUserId || ""];
+    return otherUser?.name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
-  const emojis = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🚀", "👏", "🔥"]
+  const emojis = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🚀", "👏", "🔥"];
 
   return (
     <div className="space-y-6">
@@ -176,7 +179,9 @@ function CommunityContent() {
           <h1 className="text-3xl font-bold">Community Hub</h1>
           <p className="text-muted-foreground flex items-center gap-2">
             Connect and collaborate with the tech community
-            <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}></div>
+            <div
+              className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
+            ></div>
             <span className="text-xs">{isConnected ? "Connected" : "Disconnected"}</span>
           </p>
         </div>
@@ -192,17 +197,17 @@ function CommunityContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-200px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:h-[calc(100vh-200px)]">
         {/* Sidebar */}
         <Card className="lg:col-span-1">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Conversations</CardTitle>
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-6 w-6">
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Settings">
                   <Settings className="h-3 w-3" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6">
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Notifications">
                   <Bell className="h-3 w-3" />
                 </Button>
               </div>
@@ -210,6 +215,7 @@ function CommunityContent() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
+                aria-label="Search"
                 placeholder="Search..."
                 className="pl-10 h-8"
                 value={searchTerm}
@@ -219,7 +225,7 @@ function CommunityContent() {
           </CardHeader>
           <CardContent className="p-0">
             <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mx-4 mb-4">
+              <TabsList className="mx-4 mb-4 grid w-[calc(100%-2rem)] grid-cols-2">
                 <TabsTrigger value="groups" className="text-xs">
                   <Hash className="h-3 w-3 mr-1" />
                   Groups
@@ -265,11 +271,18 @@ function CommunityContent() {
                               {group.type === "private" && <Lock className="h-3 w-3" />}
                             </p>
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{group.members.length} members</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {group.members.length} members
+                          </p>
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label="More options"
+                            >
                               <MoreVertical className="h-3 w-3" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -304,10 +317,10 @@ function CommunityContent() {
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-1 px-4">
                     {filteredDMs.map((dm) => {
-                      if (!currentUser) return null
-                      const otherUserId = dm.participants.find((id) => id !== currentUser.id)
-                      const otherUser = users[otherUserId || ""]
-                      if (!otherUser) return null
+                      if (!currentUser) return null;
+                      const otherUserId = dm.participants.find((id) => id !== currentUser.id);
+                      const otherUser = users[otherUserId || ""];
+                      if (!otherUser) return null;
 
                       return (
                         <div
@@ -320,7 +333,9 @@ function CommunityContent() {
                           <div className="relative">
                             <Avatar className="h-8 w-8">
                               <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                              <AvatarFallback className="text-xs">{otherUser.avatar}</AvatarFallback>
+                              <AvatarFallback className="text-xs">
+                                {otherUser.avatar}
+                              </AvatarFallback>
                             </Avatar>
                             <div
                               className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
@@ -353,12 +368,14 @@ function CommunityContent() {
                             </p>
                           </div>
                         </div>
-                      )
+                      );
                     })}
 
                     {/* Online Users for Quick DM */}
                     <div className="pt-4">
-                      <p className="text-xs font-medium text-muted-foreground mb-2 px-2">Start New Conversation</p>
+                      <p className="text-xs font-medium text-muted-foreground mb-2 px-2">
+                        Start New Conversation
+                      </p>
                       {Object.values(users)
                         .filter(
                           (user) =>
@@ -430,21 +447,21 @@ function CommunityContent() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" aria-label="Start voice call">
                       <Phone className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" aria-label="Start video call">
                       <Video className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" aria-label="Add member">
                       <UserPlus className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" aria-label="Search">
                       <Search className="h-4 w-4" />
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label="More options">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -478,8 +495,9 @@ function CommunityContent() {
                 <ScrollArea className="h-[400px] p-4">
                   <div className="space-y-4">
                     {currentMessages.map((msg, index) => {
-                      const isOwnMessage = msg.senderId === currentUser?.id
-                      const showAvatar = index === 0 || currentMessages[index - 1].senderId !== msg.senderId
+                      const isOwnMessage = msg.senderId === currentUser?.id;
+                      const showAvatar =
+                        index === 0 || currentMessages[index - 1].senderId !== msg.senderId;
 
                       return (
                         <div
@@ -489,7 +507,9 @@ function CommunityContent() {
                           {showAvatar ? (
                             <Avatar className="h-8 w-8">
                               <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                              <AvatarFallback className="text-xs">{msg.senderAvatar}</AvatarFallback>
+                              <AvatarFallback className="text-xs">
+                                {msg.senderAvatar}
+                              </AvatarFallback>
                             </Avatar>
                           ) : (
                             <div className="w-8" />
@@ -503,10 +523,14 @@ function CommunityContent() {
                                 <span className="text-xs text-muted-foreground">
                                   {msg.timestamp.toLocaleTimeString()}
                                 </span>
-                                {msg.edited && <span className="text-xs text-muted-foreground">(edited)</span>}
+                                {msg.edited && (
+                                  <span className="text-xs text-muted-foreground">(edited)</span>
+                                )}
                               </div>
                             )}
-                            <div className={`relative group/message ${isOwnMessage ? "flex justify-end" : ""}`}>
+                            <div
+                              className={`relative group/message ${isOwnMessage ? "flex justify-end" : ""}`}
+                            >
                               <div
                                 className={`max-w-[70%] p-3 rounded-lg ${
                                   isOwnMessage ? "bg-blue-500 text-white" : "bg-muted"
@@ -515,7 +539,9 @@ function CommunityContent() {
                                 {msg.type === "announcement" && (
                                   <div className="flex items-center gap-2 mb-2">
                                     <Zap className="h-4 w-4 text-yellow-600" />
-                                    <span className="text-sm font-medium text-yellow-800">Announcement</span>
+                                    <span className="text-sm font-medium text-yellow-800">
+                                      Announcement
+                                    </span>
                                   </div>
                                 )}
                                 <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -548,7 +574,12 @@ function CommunityContent() {
                                 <div className="flex items-center gap-1 bg-white border rounded-lg shadow-lg p-1">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label="Add emoji"
+                                      >
                                         <Smile className="h-3 w-3" />
                                       </Button>
                                     </DropdownMenuTrigger>
@@ -566,15 +597,30 @@ function CommunityContent() {
                                       </div>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    aria-label="Reply"
+                                  >
                                     <Reply className="h-3 w-3" />
                                   </Button>
                                   {isOwnMessage && (
                                     <>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label="Edit"
+                                      >
                                         <Edit className="h-3 w-3" />
                                       </Button>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-red-500"
+                                        aria-label="Delete"
+                                      >
                                         <Trash className="h-3 w-3" />
                                       </Button>
                                     </>
@@ -584,7 +630,7 @@ function CommunityContent() {
                             </div>
                           </div>
                         </div>
-                      )
+                      );
                     })}
 
                     {/* Typing Indicators */}
@@ -620,7 +666,7 @@ function CommunityContent() {
                 <div className="flex items-center space-x-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" aria-label="Attach file">
                         <Paperclip className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -646,21 +692,27 @@ function CommunityContent() {
 
                   <div className="flex-1 relative">
                     <Input
+                      aria-label="Type a message"
                       placeholder="Type a message..."
                       value={message}
                       onChange={(e) => handleTyping(e.target.value)}
                       className="pr-20"
                       onKeyPress={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault()
-                          handleSendMessage()
+                          e.preventDefault();
+                          handleSendMessage();
                         }
                       }}
                     />
                     <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
                       <DropdownMenu open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label="Add emoji"
+                          >
                             <Smile className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -713,8 +765,8 @@ function CommunityContent() {
                                 <button
                                   key={emoji}
                                   onClick={() => {
-                                    setMessage((prev) => prev + emoji)
-                                    setShowEmojiPicker(false)
+                                    setMessage((prev) => prev + emoji);
+                                    setShowEmojiPicker(false);
                                   }}
                                   className="p-1 hover:bg-gray-100 rounded text-lg"
                                 >
@@ -724,13 +776,24 @@ function CommunityContent() {
                           </div>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label="Send gift"
+                      >
                         <Gift className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
 
-                  <Button onClick={handleSendMessage} size="icon" disabled={!message.trim()} className="shrink-0">
+                  <Button
+                    onClick={handleSendMessage}
+                    size="icon"
+                    disabled={!message.trim()}
+                    className="shrink-0"
+                    aria-label="Send message"
+                  >
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
@@ -742,7 +805,9 @@ function CommunityContent() {
                 <MessageCircle className="h-16 w-16 text-muted-foreground mx-auto" />
                 <div>
                   <h3 className="text-lg font-semibold">Welcome to Community Chat</h3>
-                  <p className="text-muted-foreground">Select a channel or start a conversation to begin</p>
+                  <p className="text-muted-foreground">
+                    Select a channel or start a conversation to begin
+                  </p>
                 </div>
                 <div className="flex gap-2 justify-center">
                   <Button variant="outline" onClick={() => setSelectedTab("groups")}>
@@ -822,6 +887,7 @@ function CommunityContent() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Group Name</label>
                 <Input
+                  aria-label="Enter group name"
                   placeholder="Enter group name"
                   value={newGroupName}
                   onChange={(e) => setNewGroupName(e.target.value)}
@@ -830,6 +896,7 @@ function CommunityContent() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Description</label>
                 <Input
+                  aria-label="Enter group description"
                   placeholder="Enter group description"
                   value={newGroupDescription}
                   onChange={(e) => setNewGroupDescription(e.target.value)}
@@ -857,7 +924,11 @@ function CommunityContent() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowCreateGroup(false)} className="flex-1">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCreateGroup(false)}
+                  className="flex-1"
+                >
                   Cancel
                 </Button>
                 <Button onClick={handleCreateGroup} className="flex-1">
@@ -869,13 +940,11 @@ function CommunityContent() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 export default function CommunityPage() {
-  return (
-    <ChatProvider>
-      <CommunityContent />
-    </ChatProvider>
-  )
+  // The dashboard layout already provides a ChatProvider; this page renders
+  // inside it so chat state is shared with the group pages.
+  return <CommunityContent />;
 }

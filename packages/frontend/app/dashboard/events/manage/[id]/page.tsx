@@ -1,686 +1,416 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Users,
   Calendar,
-  DollarSign,
   Download,
-  Send,
-  Edit,
+  Eye,
+  EyeOff,
   MoreVertical,
-  Clock,
-  Mail,
-  Filter,
   Search,
+  Trash2,
   UserCheck,
-  UserX,
-  Upload,
-} from "lucide-react"
-import Link from "next/link"
-import { useState } from "react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+  Users,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ErrorState, LoadingState } from "@/components/page-state";
+import { EventTypeBadge } from "@/components/event-type-badge";
+import { eventApi } from "@/lib/api-client";
+import { useUser } from "@/lib/user-context";
+import { getCapacityPercent, getEventLocation } from "@/lib/event-helpers";
+import { formatDate, formatDateTime, getInitials, humanize } from "@/lib/format";
+import type { EventAttendee, TechEvent } from "@/lib/types";
 
-export default function ManageEventPage({ params }: { params: { id: string } }) {
-  const [selectedAttendees, setSelectedAttendees] = useState<string[]>([])
-  const [filterStatus, setFilterStatus] = useState("all")
-  const [searchTerm, setSearchTerm] = useState("")
+type StatusFilter = "all" | "REGISTERED" | "WAITLISTED" | "CANCELLED" | "ATTENDED";
 
-  // Mock event data
-  const event = {
-    id: params.id,
-    title: "AI Innovation Hackathon 2024",
-    type: "Hackathon",
-    description: "48-hour hackathon focused on building AI-powered solutions for social good.",
-    startDate: "2024-03-15",
-    endDate: "2024-03-17",
-    startTime: "09:00",
-    endTime: "18:00",
-    isOnline: false,
-    venue: "TechHub Conference Center",
-    address: "123 Tech Street, San Francisco, CA 94105",
-    maxAttendees: 500,
-    registeredCount: 245,
-    waitlistCount: 23,
-    checkedInCount: 0,
-    isPaid: true,
-    ticketPrice: 50,
-    totalRevenue: 12250,
-    status: "upcoming",
-    tags: ["AI", "Machine Learning", "Hackathon", "Social Good"],
+function escapeCsv(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function exportAttendees(event: TechEvent, attendees: EventAttendee[]) {
+  const rows = [
+    ["Name", "Email", "Status", "Attended", "Registered at"],
+    ...attendees.map((a) => [
+      a.userName ?? "",
+      a.userEmail,
+      a.status,
+      a.hasAttended ? "yes" : "no",
+      a.createdAt ?? "",
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}-attendees.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function StatusBadge({ attendee }: { attendee: EventAttendee }) {
+  if (attendee.hasAttended) {
+    return <Badge className="bg-blue-100 text-blue-800">Attended</Badge>;
   }
-
-  // Mock attendees data
-  const attendees = [
-    {
-      id: "1",
-      name: "Alice Johnson",
-      email: "alice@example.com",
-      phone: "+1 (555) 123-4567",
-      registrationDate: "2024-02-15",
-      status: "confirmed",
-      paymentStatus: "paid",
-      checkedIn: false,
-      ticketType: "regular",
-      company: "TechCorp",
-      role: "Software Engineer",
-    },
-    {
-      id: "2",
-      name: "Bob Smith",
-      email: "bob@example.com",
-      phone: "+1 (555) 234-5678",
-      registrationDate: "2024-02-16",
-      status: "confirmed",
-      paymentStatus: "paid",
-      checkedIn: false,
-      ticketType: "regular",
-      company: "StartupXYZ",
-      role: "Product Manager",
-    },
-    {
-      id: "3",
-      name: "Carol Davis",
-      email: "carol@example.com",
-      phone: "+1 (555) 345-6789",
-      registrationDate: "2024-02-17",
-      status: "waitlist",
-      paymentStatus: "pending",
-      checkedIn: false,
-      ticketType: "regular",
-      company: "InnovateLab",
-      role: "Designer",
-    },
-    {
-      id: "4",
-      name: "David Wilson",
-      email: "david@example.com",
-      phone: "+1 (555) 456-7890",
-      registrationDate: "2024-02-18",
-      status: "confirmed",
-      paymentStatus: "paid",
-      checkedIn: false,
-      ticketType: "student",
-      company: "University",
-      role: "Student",
-    },
-    {
-      id: "5",
-      name: "Emily Brown",
-      email: "emily@example.com",
-      phone: "+1 (555) 567-8901",
-      registrationDate: "2024-02-19",
-      status: "cancelled",
-      paymentStatus: "refunded",
-      checkedIn: false,
-      ticketType: "regular",
-      company: "DevStudio",
-      role: "Developer",
-    },
-  ]
-
-  const filteredAttendees = attendees.filter((attendee) => {
-    const matchesSearch =
-      attendee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      attendee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      attendee.company.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filterStatus === "all" || attendee.status === filterStatus
-    return matchesSearch && matchesFilter
-  })
-
-  const handleSelectAttendee = (attendeeId: string) => {
-    setSelectedAttendees((prev) =>
-      prev.includes(attendeeId) ? prev.filter((id) => id !== attendeeId) : [...prev, attendeeId],
-    )
+  switch (attendee.status) {
+    case "REGISTERED":
+      return <Badge className="bg-green-100 text-green-800">Registered</Badge>;
+    case "WAITLISTED":
+      return <Badge className="bg-yellow-100 text-yellow-800">Waitlist</Badge>;
+    case "CANCELLED":
+      return <Badge className="bg-red-100 text-red-800">Cancelled</Badge>;
+    default:
+      return <Badge variant="secondary">{humanize(attendee.status)}</Badge>;
   }
+}
 
-  const handleSelectAll = () => {
-    if (selectedAttendees.length === filteredAttendees.length) {
-      setSelectedAttendees([])
+export default function ManageEventPage() {
+  const params = useParams<{ id: string }>();
+  const eventId = params.id;
+  const router = useRouter();
+  const { user, isLoading: isUserLoading } = useUser();
+
+  const [event, setEvent] = useState<TechEvent | null>(null);
+  const [attendees, setAttendees] = useState<EventAttendee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attendeesError, setAttendeesError] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setAttendeesError(null);
+    const [eventResponse, attendeesResponse] = await Promise.all([
+      eventApi.getEventById(eventId),
+      eventApi.getEventAttendees(eventId),
+    ]);
+    if (eventResponse.success) {
+      setEvent(eventResponse.event);
     } else {
-      setSelectedAttendees(filteredAttendees.map((a) => a.id))
+      setError(
+        eventResponse.status === 404
+          ? "This event does not exist or has been removed."
+          : eventResponse.message || "Failed to load event",
+      );
     }
+    if (attendeesResponse.success) {
+      setAttendees(attendeesResponse.attendees ?? []);
+    } else {
+      setAttendeesError(
+        attendeesResponse.status === 403
+          ? "Only the organizer can view the attendee list."
+          : attendeesResponse.message || "Failed to load attendees",
+      );
+    }
+    setLoading(false);
+  }, [eventId]);
+
+  useEffect(() => {
+    if (!isUserLoading) void load();
+  }, [isUserLoading, load]);
+
+  const filteredAttendees = useMemo(() => {
+    const needle = searchTerm.trim().toLowerCase();
+    return attendees.filter((attendee) => {
+      const matchesSearch =
+        !needle ||
+        (attendee.userName ?? "").toLowerCase().includes(needle) ||
+        attendee.userEmail.toLowerCase().includes(needle);
+      const matchesFilter =
+        filterStatus === "all" ||
+        (filterStatus === "ATTENDED" ? attendee.hasAttended : attendee.status === filterStatus);
+      return matchesSearch && matchesFilter;
+    });
+  }, [attendees, searchTerm, filterStatus]);
+
+  const counts = useMemo(
+    () => ({
+      registered: attendees.filter((a) => a.status === "REGISTERED").length,
+      waitlisted: attendees.filter((a) => a.status === "WAITLISTED").length,
+      attended: attendees.filter((a) => a.hasAttended).length,
+    }),
+    [attendees],
+  );
+
+  const handleMarkAttendance = async (attendee: EventAttendee) => {
+    const response = await eventApi.markAttendance(attendee.id);
+    if (!response.success) {
+      toast.error(response.message || "Failed to mark attendance");
+      return;
+    }
+    setAttendees((prev) =>
+      prev.map((a) =>
+        a.id === attendee.id ? { ...a, ...response.attendee, hasAttended: true } : a,
+      ),
+    );
+    toast.success(`${attendee.userName || attendee.userEmail} checked in`);
+  };
+
+  const togglePublished = async () => {
+    if (!event) return;
+    setBusy(true);
+    const response = await eventApi.updateEvent(event.id, { isPublished: !event.isPublished });
+    setBusy(false);
+    if (!response.success) {
+      toast.error(response.message || "Failed to update event");
+      return;
+    }
+    setEvent(response.event ?? { ...event, isPublished: !event.isPublished });
+    toast.success(event.isPublished ? "Event unpublished" : "Event published");
+  };
+
+  const handleDelete = async () => {
+    if (!event) return;
+    if (!window.confirm(`Delete "${event.title}"? This cannot be undone.`)) return;
+    setBusy(true);
+    const response = await eventApi.deleteEvent(event.id);
+    setBusy(false);
+    if (!response.success) {
+      toast.error(response.message || "Failed to delete event");
+      return;
+    }
+    toast.success("Event deleted");
+    router.push("/dashboard/events");
+  };
+
+  if (isUserLoading || loading) return <LoadingState label="Loading event..." />;
+
+  if (error || !event) {
+    return (
+      <ErrorState
+        message={error ?? "Event not found"}
+        onRetry={() => void load()}
+        action={
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/events">Back to events</Link>
+          </Button>
+        }
+      />
+    );
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "confirmed":
-        return <Badge className="bg-green-100 text-green-800">Confirmed</Badge>
-      case "waitlist":
-        return <Badge className="bg-yellow-100 text-yellow-800">Waitlist</Badge>
-      case "cancelled":
-        return <Badge className="bg-red-100 text-red-800">Cancelled</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
-
-  const getPaymentBadge = (status: string) => {
-    switch (status) {
-      case "paid":
-        return <Badge className="bg-green-100 text-green-800">Paid</Badge>
-      case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
-      case "refunded":
-        return <Badge className="bg-gray-100 text-gray-800">Refunded</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
+  const isOrganizer = !!user && (event.organizerId === user.id || user.role === "admin");
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center space-x-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/events">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold">{event.title}</h1>
-          <p className="text-muted-foreground">Event Management Dashboard</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href={`/dashboard/events/edit/${event.id}`}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Event
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex flex-1 items-center space-x-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/dashboard/events" aria-label="Back to events">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Download className="h-4 w-4 mr-2" />
-                Export Attendees
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Send className="h-4 w-4 mr-2" />
-                Send Announcement
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Calendar className="h-4 w-4 mr-2" />
-                Duplicate Event
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div>
+            <h1 className="text-3xl font-bold">{event.title}</h1>
+            <p className="text-muted-foreground">Event Management Dashboard</p>
+          </div>
         </div>
+        {isOrganizer && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => void togglePublished()} disabled={busy}>
+              {event.isPublished ? (
+                <EyeOff className="mr-2 h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Eye className="mr-2 h-4 w-4" aria-hidden="true" />
+              )}
+              {event.isPublished ? "Unpublish" : "Publish"}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="More actions">
+                  <MoreVertical className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => exportAttendees(event, attendees)}
+                  disabled={attendees.length === 0}
+                >
+                  <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Export Attendees
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => router.push(`/events/${event.id}`)}>
+                  <Calendar className="mr-2 h-4 w-4" aria-hidden="true" />
+                  View Public Page
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void handleDelete()}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Delete Event
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
 
-      {/* Event Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <Card>
+        <CardContent className="flex flex-col gap-2 p-6 text-sm text-muted-foreground md:flex-row md:items-center md:gap-6">
+          <EventTypeBadge type={event.eventType} />
+          <span>{formatDateTime(event.startDateTime)}</span>
+          <span>{getEventLocation(event)}</span>
+          {event.isPublished === false && <Badge variant="outline">Draft</Badge>}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Registered</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{event.registeredCount}</div>
-            <p className="text-xs text-muted-foreground">of {event.maxAttendees} max capacity</p>
-            <Progress value={(event.registeredCount / event.maxAttendees) * 100} className="mt-2" />
+            <div className="text-2xl font-bold">{event.currentAttendees ?? counts.registered}</div>
+            <p className="text-xs text-muted-foreground">
+              {event.maxAttendees ? `of ${event.maxAttendees} max capacity` : "No capacity limit"}
+            </p>
+            {event.maxAttendees ? (
+              <Progress
+                value={getCapacityPercent(event)}
+                className="mt-2"
+                aria-label="Capacity used"
+              />
+            ) : null}
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Waitlist</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{event.waitlistCount}</div>
+            <div className="text-2xl font-bold">{counts.waitlisted}</div>
             <p className="text-xs text-muted-foreground">people waiting</p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${event.totalRevenue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">from {event.registeredCount} tickets</p>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Check-ins</CardTitle>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
+            <UserCheck className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{event.checkedInCount}</div>
-            <p className="text-xs text-muted-foreground">of {event.registeredCount} registered</p>
+            <div className="text-2xl font-bold">{counts.attended}</div>
+            <p className="text-xs text-muted-foreground">attendees checked in</p>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="attendees" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="attendees">Attendees</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="communications">Communications</TabsTrigger>
-          <TabsTrigger value="check-in">Check-in</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="attendees" className="space-y-6">
-          {/* Attendee Management Tools */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Attendee Management</CardTitle>
-                <div className="flex gap-2">
-                  {selectedAttendees.length > 0 && (
-                    <>
-                      <Button variant="outline" size="sm">
-                        <Mail className="h-4 w-4 mr-2" />
-                        Email Selected ({selectedAttendees.length})
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-2" />
-                        Export Selected
-                      </Button>
-                    </>
-                  )}
-                  <Button size="sm">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export All
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col md:flex-row gap-4 mb-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Attendee Management</CardTitle>
+          <CardDescription>Search attendees and check them in at the event</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {attendeesError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {attendeesError}
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-col gap-4 md:flex-row">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Search
+                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                   <Input
-                    placeholder="Search attendees..."
+                    placeholder="Search by name or email..."
+                    aria-label="Search attendees"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
                   />
                 </div>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-full md:w-48">
-                    <SelectValue placeholder="Filter by status" />
+                <Select
+                  value={filterStatus}
+                  onValueChange={(value) => setFilterStatus(value as StatusFilter)}
+                >
+                  <SelectTrigger className="w-full md:w-48" aria-label="Filter by status">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="waitlist">Waitlist</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="REGISTERED">Registered</SelectItem>
+                    <SelectItem value="WAITLISTED">Waitlist</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                    <SelectItem value="ATTENDED">Attended</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="outline" className="gap-2">
-                  <Filter className="h-4 w-4" />
-                  More Filters
-                </Button>
               </div>
 
-              <div className="border rounded-lg">
-                <div className="p-4 border-b bg-muted/50">
-                  <div className="flex items-center space-x-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedAttendees.length === filteredAttendees.length && filteredAttendees.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded"
-                    />
-                    <span className="font-medium">{filteredAttendees.length} attendees</span>
-                  </div>
-                </div>
-
-                <div className="divide-y">
+              {filteredAttendees.length === 0 ? (
+                <p className="py-8 text-center text-muted-foreground">
+                  {attendees.length === 0 ? "No one has registered yet." : "No attendees match."}
+                </p>
+              ) : (
+                <ul className="divide-y rounded-md border">
                   {filteredAttendees.map((attendee) => (
-                    <div key={attendee.id} className="p-4 hover:bg-muted/50">
-                      <div className="flex items-center space-x-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedAttendees.includes(attendee.id)}
-                          onChange={() => handleSelectAttendee(attendee.id)}
-                          className="rounded"
-                        />
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src="/placeholder.svg?height=40&width=40" />
+                    <li
+                      key={attendee.id}
+                      className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar>
                           <AvatarFallback>
-                            {attendee.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
+                            {getInitials(attendee.userName || attendee.userEmail)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium">{attendee.name}</p>
-                              <p className="text-sm text-muted-foreground">{attendee.email}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {attendee.company} • {attendee.role}
-                              </p>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {getStatusBadge(attendee.status)}
-                              {getPaymentBadge(attendee.paymentStatus)}
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>
-                                    <Mail className="h-4 w-4 mr-2" />
-                                    Send Email
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <UserCheck className="h-4 w-4 mr-2" />
-                                    Check In
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Edit Details
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-600">
-                                    <UserX className="h-4 w-4 mr-2" />
-                                    Cancel Registration
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
-                            <span>Registered: {attendee.registrationDate}</span>
-                            <span>Ticket: {attendee.ticketType}</span>
-                            <span>Phone: {attendee.phone}</span>
-                          </div>
+                        <div>
+                          <p className="font-medium">{attendee.userName || attendee.userEmail}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {attendee.userEmail} • Registered {formatDate(attendee.createdAt)}
+                          </p>
                         </div>
                       </div>
-                    </div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge attendee={attendee} />
+                        {isOrganizer &&
+                          attendee.status === "REGISTERED" &&
+                          !attendee.hasAttended && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleMarkAttendance(attendee)}
+                            >
+                              <UserCheck className="mr-2 h-4 w-4" aria-hidden="true" />
+                              Check in
+                            </Button>
+                          )}
+                      </div>
+                    </li>
                   ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Registration Timeline</CardTitle>
-                <CardDescription>Daily registration count over time</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  Registration chart would go here
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Attendee Demographics</CardTitle>
-                <CardDescription>Breakdown by company and role</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Software Engineers</span>
-                      <span>45%</span>
-                    </div>
-                    <Progress value={45} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Product Managers</span>
-                      <span>25%</span>
-                    </div>
-                    <Progress value={25} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Designers</span>
-                      <span>20%</span>
-                    </div>
-                    <Progress value={20} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Students</span>
-                      <span>10%</span>
-                    </div>
-                    <Progress value={10} className="h-2" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Revenue Analytics</CardTitle>
-                <CardDescription>Ticket sales and revenue breakdown</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Regular Tickets (200)</span>
-                    <span>$10,000</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Student Tickets (45)</span>
-                    <span>$2,250</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between font-medium">
-                    <span>Total Revenue</span>
-                    <span>$12,250</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Engagement Metrics</CardTitle>
-                <CardDescription>Event page views and conversion rates</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Page Views</span>
-                    <span>2,450</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Registrations</span>
-                    <span>245</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Conversion Rate</span>
-                    <span>10%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Social Shares</span>
-                    <span>89</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="communications" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Send Announcement</CardTitle>
-              <CardDescription>Communicate with your attendees</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Recipients</label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select recipients" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Attendees</SelectItem>
-                    <SelectItem value="confirmed">Confirmed Only</SelectItem>
-                    <SelectItem value="waitlist">Waitlist Only</SelectItem>
-                    <SelectItem value="checked-in">Checked-in Only</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Subject</label>
-                <Input placeholder="Enter email subject" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Message</label>
-                <textarea className="w-full p-3 border rounded-md" rows={6} placeholder="Write your message..." />
-              </div>
-              <Button>
-                <Send className="h-4 w-4 mr-2" />
-                Send Announcement
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Communication History</CardTitle>
-              <CardDescription>Previous announcements and emails sent</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-medium">Event Reminder - 1 Week</p>
-                    <p className="text-sm text-muted-foreground">Sent to 245 attendees • 2 days ago</p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    View
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-medium">Welcome & Event Details</p>
-                    <p className="text-sm text-muted-foreground">Sent to 200 attendees • 1 week ago</p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    View
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="check-in" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Event Check-in</CardTitle>
-              <CardDescription>Manage attendee check-ins for the event</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Quick Check-in</label>
-                  <div className="flex gap-2">
-                    <Input placeholder="Scan QR code or enter email" />
-                    <Button>Check In</Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Bulk Check-in</label>
-                  <Button variant="outline" className="w-full">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload Check-in List
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="font-medium">Recent Check-ins</h4>
-                <div className="space-y-2">
-                  {/* This would show recent check-ins */}
-                  <div className="text-center text-muted-foreground py-8">No check-ins yet. Event hasn't started.</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="settings" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Event Settings</CardTitle>
-              <CardDescription>Manage event configuration and preferences</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Registration Open</p>
-                    <p className="text-sm text-muted-foreground">Allow new registrations</p>
-                  </div>
-                  <input type="checkbox" defaultChecked className="rounded" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Waitlist Enabled</p>
-                    <p className="text-sm text-muted-foreground">Allow waitlist when full</p>
-                  </div>
-                  <input type="checkbox" defaultChecked className="rounded" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Auto-confirm from Waitlist</p>
-                    <p className="text-sm text-muted-foreground">Automatically confirm when spots open</p>
-                  </div>
-                  <input type="checkbox" defaultChecked className="rounded" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Send Reminders</p>
-                    <p className="text-sm text-muted-foreground">Email reminders before event</p>
-                  </div>
-                  <input type="checkbox" defaultChecked className="rounded" />
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="font-medium">Danger Zone</h4>
-                <div className="space-y-2">
-                  <Button variant="outline" className="w-full">
-                    Cancel Event
-                  </Button>
-                  <Button variant="destructive" className="w-full">
-                    Delete Event
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                </ul>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
-  )
+  );
 }
