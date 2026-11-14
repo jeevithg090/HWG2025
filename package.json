@@ -1,0 +1,17 @@
+{
+  "name": "techcollab",
+  "private": true,
+  "description": "All-in-one tech collaboration platform: freelancing, events and community",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "install:all": "npm run each -- ci",
+    "lint": "npm run each -- run lint",
+    "typecheck": "npm run each -- run typecheck",
+    "test": "npm run each -- test",
+    "build": "npm run each -- run build",
+    "format:check": "npm run each -- run format:check",
+    "each": "node scripts/each-package.mjs"
+  }
+}
