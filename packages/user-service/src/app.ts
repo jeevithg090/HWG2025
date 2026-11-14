@@ -11,7 +11,9 @@ export interface AppDependencies {
   userService?: UserService;
 }
 
-export const createApp = ({ userService = new UserService() }: AppDependencies = {}): Application => {
+export const createApp = ({
+  userService = new UserService(),
+}: AppDependencies = {}): Application => {
   const app = express();
 
   app.disable("x-powered-by");

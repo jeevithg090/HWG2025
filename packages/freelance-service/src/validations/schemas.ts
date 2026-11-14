@@ -64,11 +64,7 @@ export const UpdateProposalSchema = CreateProposalSchema.omit({ gigId: true })
 export const CreateReviewSchema = z.object({
   gigId: uuid,
   revieweeId: uuid,
-  rating: z
-    .number()
-    .int()
-    .min(1, "Rating must be at least 1")
-    .max(5, "Rating cannot exceed 5"),
+  rating: z.number().int().min(1, "Rating must be at least 1").max(5, "Rating cannot exceed 5"),
   comment: z.string().trim().max(2000).optional(),
 });
 

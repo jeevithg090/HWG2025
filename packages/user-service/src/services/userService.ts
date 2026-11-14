@@ -5,11 +5,7 @@ import { AppError } from "../common/errors";
 import { AuthUser } from "../middleware/auth";
 import { User } from "../models/user";
 import { typeormUserRepository, UserRepository } from "../repository/userRepository";
-import {
-  CreateUserInput,
-  LoginUserInput,
-  UpdateProfileInput,
-} from "../validations/userValidation";
+import { CreateUserInput, LoginUserInput, UpdateProfileInput } from "../validations/userValidation";
 
 export type PublicUser = Pick<
   User,
