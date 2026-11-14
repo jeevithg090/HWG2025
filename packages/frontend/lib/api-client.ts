@@ -1,562 +1,400 @@
-// API client for connecting with backend services
-import { toast } from "sonner";
-import { getAuthToken, getAuthHeaders } from "./auth-utils";
+/**
+ * Typed HTTP client for the TechCollab backend services.
+ *
+ * Every function resolves (it never throws) to an {@link ApiResult}: either
+ * `{ success: true, status, ...body }` mirroring the service's success payload,
+ * or `{ success: false, status, message, errors? }`. A `status` of 0 means the
+ * request never reached the server (network failure, CORS, service down).
+ *
+ * Callers are responsible for user-facing notifications (toasts etc.).
+ */
 
-// API base URLs - using environment variables would be better in a real app
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
-const USER_SERVICE_URL =
-  process.env.NEXT_PUBLIC_USER_SERVICE_URL || "http://localhost:4000"; // User service
-const EVENT_SERVICE_URL =
-  process.env.NEXT_PUBLIC_EVENT_SERVICE_URL || "http://localhost:4002"; // Event service
-const FREELANCE_SERVICE_URL =
-  process.env.NEXT_PUBLIC_FREELANCE_SERVICE_URL || "http://localhost:4001"; // Freelance service
+import { config } from "./config";
+import { getAuthHeaders, getAuthToken } from "./auth-utils";
+import type {
+  AuthUser,
+  ClientDashboard,
+  CreateEventPayload,
+  CreateGigPayload,
+  CreateProposalPayload,
+  CreateReviewPayload,
+  EventAttendee,
+  EventFilters,
+  FreelancerDashboard,
+  Gig,
+  LoginPayload,
+  Pagination,
+  Proposal,
+  Review,
+  ValidationIssue,
+  SignupPayload,
+  TechEvent,
+  UpdateEventPayload,
+  UpdateGigPayload,
+  UpdateProposalPayload,
+} from "./types";
 
-// Common headers - we'll use our auth utility but keep this as a wrapper
-// for backward compatibility and to allow passing explicit tokens
-const getHeaders = (token?: string) => {
-  // If a token is explicitly provided, use it
-  if (token) {
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+export interface ApiError {
+  success: false;
+  status: number;
+  message: string;
+  errors?: unknown;
+}
+
+export type ApiSuccess<T> = { success: true; status: number } & T;
+
+export type ApiResult<T> = ApiSuccess<T> | ApiError;
+
+export type QueryValue = string | number | boolean | null | undefined | string[];
+
+export interface RequestOptions {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  body?: unknown;
+  query?: Record<string, QueryValue>;
+  /** Explicit token; `undefined` falls back to the stored token, `null` sends none. */
+  token?: string | null;
+  /** When true the request is not sent unless a token is available. */
+  requireAuth?: boolean;
+  signal?: AbortSignal;
+}
+
+export const NETWORK_ERROR_MESSAGE =
+  "Unable to reach the server. Please check your connection and try again.";
+export const AUTH_REQUIRED_MESSAGE = "You need to sign in to do that.";
+
+/** Builds a query string, skipping empty values and joining arrays with commas. */
+export function buildQueryString(query?: Record<string, QueryValue>): string {
+  if (!query) return "";
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+      params.set(key, value.join(","));
+    } else {
+      params.set(key, String(value));
+    }
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+async function parseBody(response: Response): Promise<Record<string, unknown> | null> {
+  const text = await response.text().catch(() => "");
+  if (!text) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : { data: parsed };
+  } catch {
+    return { message: text };
+  }
+}
+
+function isFailureFlag(value: unknown): boolean {
+  return value === false || value === 0;
+}
+
+function isValidationIssue(value: unknown): value is ValidationIssue {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as { message?: unknown }).message === "string"
+  );
+}
+
+/**
+ * Turns `{ message: "VALIDATION_ERROR", errors: [{ path, message }] }` into a
+ * readable sentence such as "title: Title must be at least 5 characters".
+ */
+export function formatValidationErrors(errors: unknown): string | null {
+  if (!Array.isArray(errors)) return null;
+  const parts = errors.filter(isValidationIssue).map((issue) => {
+    const path = Array.isArray(issue.path) ? issue.path.join(".") : issue.path;
+    return path ? `${path}: ${issue.message}` : issue.message;
+  });
+  return parts.length ? parts.join("; ") : null;
+}
+
+/**
+ * Performs a JSON request against `baseUrl + path` and normalizes the result.
+ */
+export async function apiRequest<T extends object>(
+  baseUrl: string,
+  path: string,
+  options: RequestOptions = {},
+): Promise<ApiResult<T>> {
+  const { method = "GET", body, query, requireAuth = false, signal } = options;
+  // `undefined` means "use the stored token"; `null` explicitly sends none.
+  const token = options.token === undefined ? getAuthToken() : options.token;
+
+  if (requireAuth && !token) {
+    return { success: false, status: 401, message: AUTH_REQUIRED_MESSAGE };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${path}${buildQueryString(query)}`, {
+      method,
+      headers: getAuthHeaders({}, token),
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return { success: false, status: 0, message: "Request was cancelled." };
+    }
+    return { success: false, status: 0, message: NETWORK_ERROR_MESSAGE };
+  }
+
+  const payload = await parseBody(response);
+
+  if (!response.ok || isFailureFlag(payload?.success)) {
+    const validationMessage = formatValidationErrors(payload?.errors);
+    const serverMessage =
+      typeof payload?.message === "string" && payload.message ? payload.message : null;
+    const message =
+      (serverMessage === "VALIDATION_ERROR" || !serverMessage) && validationMessage
+        ? validationMessage
+        : serverMessage || response.statusText || `Request failed with status ${response.status}`;
+    const error: ApiError = {
+      success: false,
+      status: response.ok ? 400 : response.status,
+      message,
     };
+    if (payload && "errors" in payload) error.errors = payload.errors;
+    return error;
   }
 
-  // Otherwise use the auth utility which gets token from localStorage
-  return getAuthHeaders();
-};
+  const rest: Record<string, unknown> = { ...(payload ?? {}) };
+  delete rest.success;
+  return { ...(rest as T), success: true, status: response.status };
+}
 
-// Error handling
-const handleApiError = async (error: any) => {
-  console.error("API Error:", error);
+/** Returns the error message for a failed result, or a fallback. */
+export function getErrorMessage(result: ApiResult<object>, fallback: string): string {
+  return result.success ? fallback : result.message || fallback;
+}
 
-  // Try to extract error message from response
-  let message = "Something went wrong";
+const user = (path: string, options?: RequestOptions) =>
+  apiRequest(config.userServiceUrl, path, options);
+const freelance = (path: string, options?: RequestOptions) =>
+  apiRequest(config.freelanceServiceUrl, path, options);
+const events = (path: string, options?: RequestOptions) =>
+  apiRequest(config.eventServiceUrl, path, options);
 
-  // Handle fetch errors
-  if (error instanceof Response) {
-    try {
-      const errorData = await error.json();
-      message = errorData.message || "An unexpected error occurred";
-    } catch (jsonError) {
-      message = error.statusText || "Network error occurred";
-    }
-  } else if (error.message) {
-    message = error.message;
-  }
+const enc = encodeURIComponent;
 
-  toast.error(message);
-  return Promise.reject({ message, status: error.status });
-}; // User Service API
+// ---------------------------------------------------------------------------
+// User service
+// ---------------------------------------------------------------------------
+
 export const userApi = {
-  signup: async (userData: any) => {
-    try {
-      console.log("Sending signup request:", userData);
-      const response = await fetch(`${USER_SERVICE_URL}/user/signup`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify(userData),
-      });
+  signup: (payload: SignupPayload) =>
+    user("/user/signup", { method: "POST", body: payload, token: null }) as Promise<
+      ApiResult<{ user: AuthUser }>
+    >,
 
-      const data = await response.json();
+  login: (credentials: LoginPayload) =>
+    user("/user/login", { method: "POST", body: credentials, token: null }) as Promise<
+      ApiResult<{ token: string; user: AuthUser; message?: string }>
+    >,
 
-      // Check both response.ok and success field in the response
-      if (!response.ok || data.success === 0) {
-        const errorMessage = data.message || "Failed to sign up";
-        console.error("Signup error:", errorMessage, data);
-        throw new Error(errorMessage);
-      }
+  /** PATCH /user/profile with any of name, bio, skills. */
+  updateProfile: (
+    changes: { name?: string; bio?: string | null; skills?: string[] },
+    token?: string | null,
+  ) =>
+    user("/user/profile", { method: "PATCH", body: changes, token, requireAuth: true }) as Promise<
+      ApiResult<{ user: AuthUser }>
+    >,
 
-      return {
-        success: true,
-        data: data,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  login: async (credentials: { email: string; password: string }) => {
-    try {
-      console.log("Sending login request");
-      const response = await fetch(`${USER_SERVICE_URL}/user/login`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify(credentials),
-      });
-
-      const data = await response.json();
-
-      // Check both response.ok and success field in the response
-      if (!response.ok || data.success === false) {
-        const errorMessage = data.message || "Invalid login credentials";
-        console.error("Login error:", errorMessage, data);
-        throw new Error(errorMessage);
-      }
-
-      return {
-        success: true,
-        data: data,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  getUserProfile: async (token: string) => {
-    try {
-      const response = await fetch(`${USER_SERVICE_URL}/user/profile`, {
-        method: "GET",
-        headers: getHeaders(token),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch user profile");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
+  getUserProfile: (token?: string | null) =>
+    user("/user/profile", { token, requireAuth: true }) as Promise<ApiResult<{ user: AuthUser }>>,
 };
 
-// Event Service API
+// ---------------------------------------------------------------------------
+// Event service
+// ---------------------------------------------------------------------------
+
+type EventsList = { events: TechEvent[]; pagination?: Pagination };
+
 export const eventApi = {
-  getAllEvents: async (filters?: any, token?: string) => {
-    try {
-      const queryParams = filters
-        ? new URLSearchParams(filters).toString()
-        : "";
-      const url = `${EVENT_SERVICE_URL}/events${
-        queryParams ? `?${queryParams}` : ""
-      }`;
+  getAllEvents: (filters?: EventFilters, token?: string | null) =>
+    events("/events", { query: { ...filters }, token }) as Promise<ApiResult<EventsList>>,
 
-      const response = await fetch(url, {
-        method: "GET",
-        headers: getHeaders(token),
-      });
+  getEventById: (eventId: string, token?: string | null) =>
+    events(`/events/${enc(eventId)}`, { token }) as Promise<ApiResult<{ event: TechEvent }>>,
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch events");
-      }
+  createEvent: (payload: CreateEventPayload, token?: string | null) =>
+    events("/events", { method: "POST", body: payload, token, requireAuth: true }) as Promise<
+      ApiResult<{ event: TechEvent }>
+    >,
 
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
+  updateEvent: (eventId: string, payload: UpdateEventPayload, token?: string | null) =>
+    events(`/events/${enc(eventId)}`, {
+      method: "PUT",
+      body: payload,
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<{ event: TechEvent }>>,
 
-  getEventById: async (eventId: string, token?: string) => {
-    try {
-      const response = await fetch(`${EVENT_SERVICE_URL}/events/${eventId}`, {
-        method: "GET",
-        headers: getHeaders(token),
-      });
+  deleteEvent: (eventId: string, token?: string | null) =>
+    events(`/events/${enc(eventId)}`, {
+      method: "DELETE",
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<{ message?: string }>>,
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch event details");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  createEvent: async (eventData: any, token: string) => {
-    try {
-      const response = await fetch(`${EVENT_SERVICE_URL}/events`, {
-        method: "POST",
-        headers: getHeaders(token),
-        body: JSON.stringify(eventData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ message: response.statusText }));
-        return {
-          success: false,
-          message: errorData.message || "Failed to create event",
-        };
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  registerForEvent: async (
+  /** The service takes the user's id/email from the token; `userName` is optional. */
+  registerForEvent: (
     eventId: string,
-    registrationData: any,
-    token: string
-  ) => {
-    try {
-      const response = await fetch(
-        `${EVENT_SERVICE_URL}/events/${eventId}/register`,
-        {
-          method: "POST",
-          headers: getHeaders(token),
-          body: JSON.stringify(registrationData),
-        }
-      );
+    registration: { userName?: string } = {},
+    token?: string | null,
+  ) =>
+    events(`/events/${enc(eventId)}/register`, {
+      method: "POST",
+      body: registration,
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<{ message?: string; attendee?: EventAttendee }>>,
 
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ message: response.statusText }));
-        return {
-          success: false,
-          message: errorData.message || "Failed to register for event",
-        };
-      }
+  cancelRegistration: (eventId: string, token?: string | null) =>
+    events(`/events/${enc(eventId)}/cancel`, {
+      method: "POST",
+      body: {},
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<{ message?: string }>>,
 
-      // Assuming the registration endpoint returns some data upon success,
-      // like the registration details or a success message.
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result, // Adjust based on actual API response structure
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-}; // Freelance Service API
-export const freelanceApi = {
-  // Gigs (Projects) API
-  getProjects: async (filters?: any, token?: string) => {
-    try {
-      const queryParams = filters
-        ? new URLSearchParams(filters).toString()
-        : "";
-      const url = `${FREELANCE_SERVICE_URL}/gigs${
-        queryParams ? `?${queryParams}` : ""
-      }`;
+  getEventAttendees: (eventId: string, token?: string | null) =>
+    events(`/events/${enc(eventId)}/attendees`, { token, requireAuth: true }) as Promise<
+      ApiResult<{ attendees: EventAttendee[] }>
+    >,
 
-      const response = await fetch(url, {
-        method: "GET",
-        headers: getHeaders(token),
-      });
+  markAttendance: (attendeeId: string, token?: string | null) =>
+    events(`/events/attendees/${enc(attendeeId)}/mark-attendance`, {
+      method: "POST",
+      body: {},
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<{ attendee: EventAttendee }>>,
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch projects");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  createProject: async (projectData: any, token: string) => {
-    try {
-      const response = await fetch(`${FREELANCE_SERVICE_URL}/gigs`, {
-        method: "POST",
-        headers: getHeaders(token),
-        body: JSON.stringify(projectData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to create project");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  getGigById: async (gigId: string, token?: string) => {
-    try {
-      const response = await fetch(`${FREELANCE_SERVICE_URL}/gigs/${gigId}`, {
-        method: "GET",
-        headers: getHeaders(token),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch project details");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  updateGig: async (gigId: string, gigData: any, token: string) => {
-    try {
-      const response = await fetch(`${FREELANCE_SERVICE_URL}/gigs/${gigId}`, {
-        method: "PUT",
-        headers: getHeaders(token),
-        body: JSON.stringify(gigData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to update project");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  // Proposals API
-  createProposal: async (proposalData: any, token: string) => {
-    try {
-      const response = await fetch(`${FREELANCE_SERVICE_URL}/proposals`, {
-        method: "POST",
-        headers: getHeaders(token),
-        body: JSON.stringify(proposalData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to submit proposal");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  getProposalsByGigId: async (gigId: string, token: string) => {
-    try {
-      const response = await fetch(
-        `${FREELANCE_SERVICE_URL}/proposals/gig/${gigId}`,
-        {
-          method: "GET",
-          headers: getHeaders(token),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch proposals");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  getProposalsByFreelancerId: async (freelancerId: string, token: string) => {
-    try {
-      const response = await fetch(
-        `${FREELANCE_SERVICE_URL}/proposals/freelancer/${freelancerId}`,
-        {
-          method: "GET",
-          headers: getHeaders(token),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message || "Failed to fetch freelancer proposals"
-        );
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  updateProposal: async (
-    proposalId: string,
-    proposalData: any,
-    token: string
-  ) => {
-    try {
-      const response = await fetch(
-        `${FREELANCE_SERVICE_URL}/proposals/${proposalId}`,
-        {
-          method: "PUT",
-          headers: getHeaders(token),
-          body: JSON.stringify(proposalData),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to update proposal");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  // Reviews API
-  createReview: async (reviewData: any, token: string) => {
-    try {
-      const response = await fetch(`${FREELANCE_SERVICE_URL}/reviews`, {
-        method: "POST",
-        headers: getHeaders(token),
-        body: JSON.stringify(reviewData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to submit review");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  getReviewsByGigId: async (gigId: string, token?: string) => {
-    try {
-      const response = await fetch(
-        `${FREELANCE_SERVICE_URL}/reviews/gig/${gigId}`,
-        {
-          method: "GET",
-          headers: getHeaders(token),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch reviews");
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  // Dashboard API
-  getClientDashboard: async (clientId: string, token: string) => {
-    try {
-      const response = await fetch(
-        `${FREELANCE_SERVICE_URL}/dashboard/client/${clientId}`,
-        {
-          method: "GET",
-          headers: getHeaders(token),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message || "Failed to fetch client dashboard"
-        );
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-
-  getFreelancerDashboard: async (freelancerId: string, token: string) => {
-    try {
-      const response = await fetch(
-        `${FREELANCE_SERVICE_URL}/dashboard/freelancer/${freelancerId}`,
-        {
-          method: "GET",
-          headers: getHeaders(token),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message || "Failed to fetch freelancer dashboard"
-        );
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        data: result.data || result,
-      };
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
+  getUserEvents: (userId: string, token?: string | null) =>
+    events(`/events/user/${enc(userId)}`, { token }) as Promise<
+      ApiResult<{ events: EventAttendee[] }>
+    >,
 };
 
-export default {
+// ---------------------------------------------------------------------------
+// Freelance service
+// ---------------------------------------------------------------------------
+
+type Data<T> = { data: T };
+type Paged<T> = { data: T[]; pagination?: Pagination };
+
+export interface GigSearchParams {
+  query?: string;
+  skills?: string[];
+}
+
+export const freelanceApi = {
+  getProjects: (filters?: { page?: number; limit?: number }, token?: string | null) =>
+    freelance("/gigs", { query: { ...filters }, token }) as Promise<ApiResult<Paged<Gig>>>,
+
+  searchProjects: (params: GigSearchParams, token?: string | null) =>
+    freelance("/gigs/search", {
+      query: { query: params.query, skills: params.skills },
+      token,
+    }) as Promise<ApiResult<Paged<Gig>>>,
+
+  getGigById: (gigId: string, token?: string | null) =>
+    freelance(`/gigs/${enc(gigId)}`, { token }) as Promise<ApiResult<Data<Gig>>>,
+
+  getGigsByClientId: (clientId: string, token?: string | null) =>
+    freelance(`/gigs/client/${enc(clientId)}`, { token }) as Promise<ApiResult<Paged<Gig>>>,
+
+  createProject: (payload: CreateGigPayload, token?: string | null) =>
+    freelance("/gigs", { method: "POST", body: payload, token, requireAuth: true }) as Promise<
+      ApiResult<Data<Gig>>
+    >,
+
+  updateGig: (gigId: string, payload: UpdateGigPayload, token?: string | null) =>
+    freelance(`/gigs/${enc(gigId)}`, {
+      method: "PUT",
+      body: payload,
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<Data<Gig>>>,
+
+  deleteGig: (gigId: string, token?: string | null) =>
+    freelance(`/gigs/${enc(gigId)}`, {
+      method: "DELETE",
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<{ message?: string }>>,
+
+  createProposal: (payload: CreateProposalPayload, token?: string | null) =>
+    freelance("/proposals", {
+      method: "POST",
+      body: payload,
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<Data<Proposal>>>,
+
+  getProposalsByGigId: (gigId: string, token?: string | null) =>
+    freelance(`/proposals/gig/${enc(gigId)}`, { token, requireAuth: true }) as Promise<
+      ApiResult<Paged<Proposal>>
+    >,
+
+  getProposalsByFreelancerId: (freelancerId: string, token?: string | null) =>
+    freelance(`/proposals/freelancer/${enc(freelancerId)}`, {
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<Paged<Proposal>>>,
+
+  getProposalById: (proposalId: string, token?: string | null) =>
+    freelance(`/proposals/${enc(proposalId)}`, { token, requireAuth: true }) as Promise<
+      ApiResult<Data<Proposal>>
+    >,
+
+  /** Gig owner: accept/reject. Freelancer: withdraw or edit while pending. */
+  updateProposal: (proposalId: string, payload: UpdateProposalPayload, token?: string | null) =>
+    freelance(`/proposals/${enc(proposalId)}`, {
+      method: "PUT",
+      body: payload,
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<Data<Proposal>>>,
+
+  createReview: (payload: CreateReviewPayload, token?: string | null) =>
+    freelance("/reviews", {
+      method: "POST",
+      body: payload,
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<Data<Review>>>,
+
+  getReviewsByGigId: (gigId: string, token?: string | null) =>
+    freelance(`/reviews/gig/${enc(gigId)}`, { token }) as Promise<ApiResult<Paged<Review>>>,
+
+  getClientDashboard: (clientId: string, token?: string | null) =>
+    freelance(`/dashboard/client/${enc(clientId)}`, { token, requireAuth: true }) as Promise<
+      ApiResult<Data<ClientDashboard>>
+    >,
+
+  getFreelancerDashboard: (freelancerId: string, token?: string | null) =>
+    freelance(`/dashboard/freelancer/${enc(freelancerId)}`, {
+      token,
+      requireAuth: true,
+    }) as Promise<ApiResult<Data<FreelancerDashboard>>>,
+};
+
+const api = {
   user: userApi,
   event: eventApi,
   freelance: freelanceApi,
 };
+
+export default api;

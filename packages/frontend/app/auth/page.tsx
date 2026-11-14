@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ArrowRight, Briefcase, Calendar, MessageCircle, Shield, Zap, Users } from "lucide-react"
-import Link from "next/link"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ArrowRight, Briefcase, Calendar, MessageCircle, Shield, Zap, Users } from "lucide-react";
+import Link from "next/link";
 
 export default function AuthPage() {
   return (
@@ -19,7 +19,8 @@ export default function AuthPage() {
         </div>
         <h1 className="text-4xl font-bold mb-4">Join the Future of Tech Collaboration</h1>
         <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-          Connect with freelancers, discover events, and build communities. Choose how you'd like to get started.
+          Connect with freelancers, discover events, and build communities. Choose how you&apos;d
+          like to get started.
         </p>
       </div>
 
@@ -56,13 +57,6 @@ export default function AuthPage() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-
-            <p className="text-center text-sm text-muted-foreground">
-              Forgot your password?{" "}
-              <Link href="/auth/forgot-password" className="text-blue-600 hover:underline">
-                Reset it here
-              </Link>
-            </p>
           </CardContent>
         </Card>
 
@@ -105,17 +99,6 @@ export default function AuthPage() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-
-            <p className="text-center text-sm text-muted-foreground">
-              By signing up, you agree to our{" "}
-              <Link href="/terms" className="text-purple-600 hover:underline">
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link href="/privacy" className="text-purple-600 hover:underline">
-                Privacy Policy
-              </Link>
-            </p>
           </CardContent>
         </Card>
       </div>
@@ -155,5 +138,5 @@ export default function AuthPage() {
         </Button>
       </div>
     </div>
-  )
+  );
 }

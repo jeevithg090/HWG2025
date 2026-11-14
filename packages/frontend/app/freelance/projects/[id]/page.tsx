@@ -1,399 +1,490 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import {
+  Briefcase,
+  Calendar,
+  Check,
+  ChevronLeft,
+  Clock,
+  DollarSign,
+  SendHorizontal,
+  Star,
+  Tag,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Header } from "@/components/header";
-import { 
-  Calendar, 
-  ChevronLeft, 
-  Clock, 
-  DollarSign, 
-  Briefcase, 
-  User, 
-  Tag, 
-  SendHorizontal,
-  Star
-} from "lucide-react";
-import { useAuth } from '@/lib/auth-context';
-import { freelanceApi } from '@/lib/api-client';
-import { toast } from 'sonner';
+import { ErrorState, LoadingState } from "@/components/page-state";
+import { useAuth } from "@/lib/auth-context";
+import { freelanceApi } from "@/lib/api-client";
+import { formatCurrency, formatDate, humanize } from "@/lib/format";
+import type { Gig, Proposal, ProposalStatus } from "@/lib/types";
+
+function statusVariant(status: string) {
+  switch (status) {
+    case "open":
+    case "accepted":
+      return "default" as const;
+    case "cancelled":
+    case "rejected":
+      return "destructive" as const;
+    case "in_progress":
+    case "pending":
+      return "secondary" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function Stars({ rating }: { rating: number }) {
+  return (
+    <span className="flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          aria-hidden="true"
+          className={`h-4 w-4 ${i < rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
+        />
+      ))}
+    </span>
+  );
+}
 
 export default function ProjectDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const { token, isAuthenticated, user } = useAuth();
-  
-  const [project, setProject] = useState(null);
-  const [proposals, setProposals] = useState([]);
+  const params = useParams<{ id: string }>();
+  const gigId = params.id;
+  const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
+
+  const [project, setProject] = useState<Gig | null>(null);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [myProposal, setMyProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
-  const [proposalContent, setProposalContent] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const userId = user?.id;
+
+  const loadProject = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setNotFound(false);
+    const response = await freelanceApi.getGigById(gigId);
+    if (!response.success) {
+      if (response.status === 404) setNotFound(true);
+      else setError(response.message || "Failed to load project details");
+      setLoading(false);
+      return;
+    }
+    const gig = response.data;
+    setProject(gig);
+
+    if (userId && gig.clientId === userId) {
+      const proposalsResponse = await freelanceApi.getProposalsByGigId(gig.id);
+      setProposals(proposalsResponse.success ? (proposalsResponse.data ?? []) : []);
+      if (!proposalsResponse.success) {
+        toast.error(proposalsResponse.message || "Failed to load proposals");
+      }
+    } else if (userId) {
+      const mine = await freelanceApi.getProposalsByFreelancerId(userId);
+      setMyProposal(
+        mine.success ? ((mine.data ?? []).find((p) => p.gigId === gig.id) ?? null) : null,
+      );
+    }
+    setLoading(false);
+  }, [gigId, userId]);
 
   useEffect(() => {
-    if (params.id) {
-      loadProject(params.id);
-    }
-  }, [params.id]);
+    if (!isAuthLoading) void loadProject();
+  }, [isAuthLoading, loadProject]);
 
-  const loadProject = async (projectId) => {
-    setLoading(true);
-    try {
-      const response = await freelanceApi.getGigById(projectId);
-      if (response.success) {
-        setProject(response.data);
-        
-        if (isAuthenticated) {
-          // If user is logged in, also load the proposals if needed
-          if (response.data.clientId === user.id) {
-            const proposalsResponse = await freelanceApi.getProposalsByGigId(projectId);
-            if (proposalsResponse.success) {
-              setProposals(proposalsResponse.data);
-            }
-          }
-        }
-      } else {
-        toast.error('Failed to load project details');
-        router.push('/freelance/projects');
-      }
-    } catch (error) {
-      console.error('Failed to load project:', error);
-      toast.error('Failed to load project details');
-      router.push('/freelance/projects');
-    } finally {
-      setLoading(false);
+  const isProjectOwner = !!user && project?.clientId === user.id;
+  const acceptedProposal = useMemo(
+    () => proposals.find((proposal) => proposal.status === "accepted") ?? null,
+    [proposals],
+  );
+  const alreadyReviewed = !!user && !!project?.reviews?.some((r) => r.reviewerId === user.id);
+
+  const updateProposalStatus = async (proposal: Proposal, status: ProposalStatus) => {
+    setBusyId(proposal.id);
+    const response = await freelanceApi.updateProposal(proposal.id, { status });
+    setBusyId(null);
+    if (!response.success) {
+      toast.error(response.message || "Failed to update proposal");
+      return;
     }
+    toast.success(`Proposal ${status}`);
+    void loadProject();
   };
 
-  const handleSubmitProposal = async (e) => {
+  const updateGigStatus = async (status: Gig["status"]) => {
+    if (!project) return;
+    setBusyId(project.id);
+    const response = await freelanceApi.updateGig(project.id, { status });
+    setBusyId(null);
+    if (!response.success) {
+      toast.error(response.message || "Failed to update project");
+      return;
+    }
+    setProject((prev) => (prev ? { ...prev, ...response.data, reviews: prev.reviews } : prev));
+    toast.success(`Project marked as ${humanize(status).toLowerCase()}`);
+  };
+
+  const handleSubmitReview = async (e: FormEvent) => {
     e.preventDefault();
-    
-    if (!isAuthenticated) {
-      toast.error('Please login to submit a proposal');
-      router.push('/auth');
-      return;
-    }
-    
-    if (!proposalContent.trim()) {
-      toast.error('Please write a proposal before submitting');
-      return;
-    }
-    
-    setSubmitting(true);
-    try {
-      const proposalData = {
-        gigId: project.id,
-        freelancerId: user.id,
-        coverLetter: proposalContent,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      
-      const response = await freelanceApi.createProposal(proposalData, token);
-      
-      if (response.success) {
-        toast.success('Proposal submitted successfully!');
-        setProposalContent('');
-        
-        // Refresh project to show the user has applied
-        loadProject(params.id);
-      } else {
-        toast.error('Failed to submit proposal');
-      }
-    } catch (error) {
-      console.error('Failed to submit proposal:', error);
-      toast.error('Failed to submit proposal');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Flexible';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
+    if (!project || !acceptedProposal) return;
+    setSubmittingReview(true);
+    const response = await freelanceApi.createReview({
+      gigId: project.id,
+      revieweeId: acceptedProposal.freelancerId,
+      rating,
+      comment: comment.trim() || undefined,
     });
+    setSubmittingReview(false);
+    if (!response.success) {
+      toast.error(response.message || "Failed to submit review");
+      return;
+    }
+    toast.success("Review submitted");
+    setComment("");
+    void loadProject();
   };
 
-  const formatBudget = (budget) => {
-    if (!budget) return 'Negotiable';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(budget);
-  };
-
-  // Check if the current user has already submitted a proposal
-  const hasSubmittedProposal = user && proposals.some(proposal => proposal.freelancerId === user.id);
-  
-  // Check if the current user is the project owner
-  const isProjectOwner = user && project?.clientId === user.id;
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <Header />
-        <div className="container mx-auto px-4 py-12 text-center">
-          <p>Loading project details...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!project) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <Header />
-        <div className="container mx-auto px-4 py-12 text-center">
-          <h1 className="text-2xl font-bold mb-4">Project not found</h1>
-          <Button onClick={() => router.push('/freelance/projects')}>
-            <ChevronLeft className="mr-2 h-4 w-4" /> Back to Projects
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+  const shell = (content: ReactNode) => (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <Header />
-      
-      <div className="container mx-auto px-4 py-8">
-        <Button variant="ghost" onClick={() => router.push('/freelance/projects')} className="mb-6">
-          <ChevronLeft className="mr-2 h-4 w-4" /> Back to Projects
-        </Button>
-        
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Main content */}
-          <div className="md:col-span-2">
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-2">
-                <Badge>{project.projectType?.replace('_', ' ')}</Badge>
-                <Badge variant={project.status === 'open' ? 'default' : 'secondary'}>
-                  {project.status}
-                </Badge>
-              </div>
-              <h1 className="text-3xl md:text-4xl font-bold mb-3">{project.title}</h1>
-              <p className="text-muted-foreground">
-                Posted on {formatDate(project.createdAt)}
-              </p>
-            </div>
-            
-            <div className="prose prose-blue max-w-none mb-8">
-              <h2>Project Description</h2>
-              <p className="whitespace-pre-line">{project.description}</p>
-            </div>
+      <main className="container mx-auto px-4 py-8">{content}</main>
+    </div>
+  );
 
-            {project.skills && project.skills.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold mb-2">Required Skills</h3>
-                <div className="flex flex-wrap gap-2">
-                  {project.skills.map((skill, index) => (
-                    <Badge key={index} variant="outline">
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
+  if (loading || isAuthLoading) {
+    return shell(<LoadingState label="Loading project details..." />);
+  }
+
+  if (error) {
+    return shell(<ErrorState message={error} onRetry={() => void loadProject()} />);
+  }
+
+  if (notFound || !project) {
+    return shell(
+      <div className="py-12 text-center">
+        <h1 className="mb-4 text-2xl font-bold">Project not found</h1>
+        <Button asChild>
+          <Link href="/freelance">
+            <ChevronLeft className="mr-2 h-4 w-4" aria-hidden="true" /> Back to Projects
+          </Link>
+        </Button>
+      </div>,
+    );
+  }
+
+  return shell(
+    <>
+      <Button variant="ghost" asChild className="mb-6">
+        <Link href="/freelance">
+          <ChevronLeft className="mr-2 h-4 w-4" aria-hidden="true" /> Back to Projects
+        </Link>
+      </Button>
+
+      <div className="grid gap-8 md:grid-cols-3">
+        <div className="space-y-8 md:col-span-2">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Badge variant={statusVariant(project.status)}>{humanize(project.status)}</Badge>
+            </div>
+            <h1 className="mb-3 text-3xl font-bold md:text-4xl">{project.title}</h1>
+            <p className="text-muted-foreground">Posted on {formatDate(project.createdAt)}</p>
+          </div>
+
+          <section>
+            <h2 className="mb-2 text-xl font-semibold">Project Description</h2>
+            <p className="whitespace-pre-line text-muted-foreground">{project.description}</p>
+          </section>
+
+          {project.requiredSkills && project.requiredSkills.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-lg font-semibold">Required Skills</h2>
+              <div className="flex flex-wrap gap-2">
+                {project.requiredSkills.map((skill) => (
+                  <Badge key={skill} variant="outline">
+                    {skill}
+                  </Badge>
+                ))}
               </div>
-            )}
-            
-            {/* Submit proposal section - only show if user is logged in, not the project owner, and hasn't submitted a proposal yet */}
-            {isAuthenticated && !isProjectOwner && !hasSubmittedProposal && project.status === 'open' && (
-              <div className="bg-card rounded-lg border p-6 shadow-sm mb-8">
-                <h2 className="text-xl font-semibold mb-4">Submit a Proposal</h2>
-                <form onSubmit={handleSubmitProposal}>
-                  <Textarea
-                    placeholder="Describe why you're a good fit for this project..."
-                    className="min-h-32 mb-4"
-                    value={proposalContent}
-                    onChange={(e) => setProposalContent(e.target.value)}
-                    required
-                  />
-                  <Button type="submit" disabled={submitting} className="w-full">
-                    {submitting ? 'Submitting...' : 'Submit Proposal'}
-                    <SendHorizontal className="ml-2 h-4 w-4" />
-                  </Button>
-                </form>
-              </div>
-            )}
-            
-            {/* Show message if user already submitted a proposal */}
-            {isAuthenticated && !isProjectOwner && hasSubmittedProposal && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8 text-center">
-                <p className="text-blue-700">You have already submitted a proposal for this project.</p>
-              </div>
-            )}
-            
-            {/* Proposals section - only visible to the project owner */}
-            {isAuthenticated && isProjectOwner && proposals.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-xl font-semibold mb-4">Proposals ({proposals.length})</h2>
+            </section>
+          )}
+
+          {isProjectOwner && (
+            <section>
+              <h2 className="mb-4 text-xl font-semibold">Proposals ({proposals.length})</h2>
+              {proposals.length === 0 ? (
+                <Card>
+                  <CardContent className="py-6 text-center text-muted-foreground">
+                    No proposals yet.
+                  </CardContent>
+                </Card>
+              ) : (
                 <div className="space-y-4">
                   {proposals.map((proposal) => (
                     <Card key={proposal.id}>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <User className="h-5 w-5 text-muted-foreground" />
-                            <CardTitle className="text-lg">{proposal.freelancerName || 'Freelancer'}</CardTitle>
-                          </div>
-                          <Badge variant={proposal.status === 'accepted' ? 'default' : 'outline'}>
-                            {proposal.status}
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle className="text-base">
+                            Bid {formatCurrency(proposal.bidAmount, "—")}
+                            {proposal.estimatedTimeInDays
+                              ? ` • ${proposal.estimatedTimeInDays} days`
+                              : ""}
+                          </CardTitle>
+                          <Badge variant={statusVariant(proposal.status)}>
+                            {humanize(proposal.status)}
                           </Badge>
                         </div>
                         <CardDescription>
-                          Submitted on {formatDate(proposal.createdAt)}
+                          Submitted {formatDate(proposal.createdAt)}
                         </CardDescription>
                       </CardHeader>
-                      <CardContent>
-                        <p className="whitespace-pre-line">{proposal.coverLetter}</p>
+                      <CardContent className="space-y-4">
+                        <p className="whitespace-pre-line text-sm">{proposal.coverLetter}</p>
+                        {proposal.status === "pending" && project.status === "open" && (
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={busyId === proposal.id}
+                              onClick={() => void updateProposalStatus(proposal, "accepted")}
+                            >
+                              <Check className="mr-1 h-4 w-4" aria-hidden="true" /> Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busyId === proposal.id}
+                              onClick={() => void updateProposalStatus(proposal, "rejected")}
+                            >
+                              <X className="mr-1 h-4 w-4" aria-hidden="true" /> Reject
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
-                      {proposal.status === 'pending' && (
-                        <CardFooter className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleProposalAction(proposal.id, 'rejected')}
-                          >
-                            Decline
-                          </Button>
-                          <Button 
-                            size="sm"
-                            onClick={() => handleProposalAction(proposal.id, 'accepted')}
-                          >
-                            Accept
-                          </Button>
-                        </CardFooter>
-                      )}
                     </Card>
                   ))}
                 </div>
+              )}
+            </section>
+          )}
+
+          <section>
+            <h2 className="mb-4 text-xl font-semibold">Reviews</h2>
+            {project.reviews && project.reviews.length > 0 ? (
+              <div className="space-y-3">
+                {project.reviews.map((review) => (
+                  <Card key={review.id}>
+                    <CardContent className="space-y-2 pt-6">
+                      <div className="flex items-center justify-between">
+                        <Stars rating={review.rating} />
+                        <span className="text-sm text-muted-foreground">
+                          {formatDate(review.createdAt)}
+                        </span>
+                      </div>
+                      {review.comment && <p className="text-sm">{review.comment}</p>}
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No reviews yet.</p>
             )}
-          </div>
-          
-          {/* Project details sidebar */}
-          <div>
-            <div className="bg-card rounded-lg border p-6 shadow-sm mb-6">
-              <h3 className="text-xl font-semibold mb-4">Project Details</h3>
-              
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <DollarSign className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">{formatBudget(project.budget)}</p>
-                    <p className="text-sm text-muted-foreground">Budget</p>
-                  </div>
-                </div>
-                
-                {project.deadline && (
-                  <div className="flex gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">{formatDate(project.deadline)}</p>
-                      <p className="text-sm text-muted-foreground">Deadline</p>
+
+            {isProjectOwner &&
+              project.status === "completed" &&
+              acceptedProposal &&
+              !alreadyReviewed && (
+                <form
+                  onSubmit={handleSubmitReview}
+                  className="mt-4 space-y-3 rounded-lg border p-4"
+                >
+                  <h3 className="font-medium">Review the freelancer</h3>
+                  <fieldset>
+                    <legend className="mb-1 text-sm">Rating</legend>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <Button
+                          key={value}
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`${value} star${value > 1 ? "s" : ""}`}
+                          aria-pressed={rating === value}
+                          onClick={() => setRating(value)}
+                        >
+                          <Star
+                            aria-hidden="true"
+                            className={`h-5 w-5 ${value <= rating ? "fill-yellow-400 text-yellow-400" : ""}`}
+                          />
+                        </Button>
+                      ))}
                     </div>
+                  </fieldset>
+                  <div className="space-y-1">
+                    <Label htmlFor="review-comment">Comment</Label>
+                    <Textarea
+                      id="review-comment"
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      rows={3}
+                    />
                   </div>
-                )}
-                
-                {project.estimatedDuration && (
-                  <div className="flex gap-3">
-                    <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">{project.estimatedDuration}</p>
-                      <p className="text-sm text-muted-foreground">Estimated duration</p>
-                    </div>
-                  </div>
-                )}
-                
-                <div className="flex gap-3">
-                  <Briefcase className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">{project.experienceLevel?.replace('_', ' ') || 'Any level'}</p>
-                    <p className="text-sm text-muted-foreground">Experience level</p>
-                  </div>
-                </div>
-                
-                <div className="flex gap-3">
-                  <User className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">{project.clientName || 'Client'}</p>
-                    <p className="text-sm text-muted-foreground">Posted by</p>
-                  </div>
-                </div>
-                
-                {project.clientRating && (
-                  <div className="flex gap-3">
-                    <Star className="h-5 w-5 text-yellow-500 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">{project.clientRating} / 5</p>
-                      <p className="text-sm text-muted-foreground">Client rating</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              {isAuthenticated && !isProjectOwner && project.status === 'open' && !hasSubmittedProposal && (
-                <>
-                  <Separator className="my-6" />
-                  <Button 
-                    className="w-full" 
-                    size="lg"
-                    onClick={() => document.getElementById('proposal-section').scrollIntoView({ behavior: 'smooth' })}
-                  >
-                    Apply Now
+                  <Button type="submit" disabled={submittingReview}>
+                    {submittingReview ? "Submitting..." : "Submit review"}
                   </Button>
-                </>
+                </form>
+              )}
+          </section>
+        </div>
+
+        <aside>
+          <div className="rounded-lg border bg-card p-6 shadow-sm">
+            <h2 className="mb-4 text-xl font-semibold">Project Details</h2>
+
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <DollarSign
+                  className="h-5 w-5 flex-shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="font-medium">Budget</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatCurrency(project.budget, "Negotiable")}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Calendar
+                  className="h-5 w-5 flex-shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="font-medium">Deadline</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatDate(project.deadline, "Flexible")}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Briefcase
+                  className="h-5 w-5 flex-shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="font-medium">Proposals</p>
+                  <p className="text-sm text-muted-foreground">
+                    {project.proposalCount ?? proposals.length} received
+                  </p>
+                </div>
+              </div>
+              {project.attachmentUrl && (
+                <div className="flex gap-3">
+                  <Tag className="h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <a
+                    href={project.attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    View attachment
+                  </a>
+                </div>
               )}
             </div>
-            
-            {/* Project actions for owners */}
-            {isAuthenticated && isProjectOwner && (
-              <div className="bg-card rounded-lg border p-6 shadow-sm">
-                <h3 className="text-lg font-semibold mb-4">Project Actions</h3>
-                <div className="space-y-3">
-                  <Button 
-                    variant="outline" 
+
+            <Separator className="my-6" />
+
+            {isProjectOwner ? (
+              <div className="space-y-2">
+                {project.status === "in_progress" && (
+                  <Button
                     className="w-full"
-                    onClick={() => router.push(`/freelance/projects/edit/${project.id}`)}
+                    disabled={busyId === project.id}
+                    onClick={() => void updateGigStatus("completed")}
                   >
-                    Edit Project
+                    Mark as completed
                   </Button>
-                  
-                  {project.status === 'open' && (
-                    <Button 
-                      variant="outline" 
-                      className="w-full text-red-500 border-red-200 hover:bg-red-50"
-                      onClick={() => handleCloseProject()}
-                    >
-                      Close Project
-                    </Button>
-                  )}
-                  
-                  {project.status === 'closed' && (
-                    <Button 
-                      variant="outline" 
-                      className="w-full text-green-500 border-green-200 hover:bg-green-50"
-                      onClick={() => handleReopenProject()}
-                    >
-                      Reopen Project
-                    </Button>
-                  )}
-                </div>
+                )}
+                {project.status === "open" && (
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    disabled={busyId === project.id}
+                    onClick={() => void updateGigStatus("cancelled")}
+                  >
+                    Close project
+                  </Button>
+                )}
+                {project.status === "cancelled" && (
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    disabled={busyId === project.id}
+                    onClick={() => void updateGigStatus("open")}
+                  >
+                    Reopen project
+                  </Button>
+                )}
               </div>
+            ) : myProposal ? (
+              <div className="space-y-2 text-center">
+                <Badge variant={statusVariant(myProposal.status)}>
+                  Your proposal: {humanize(myProposal.status)}
+                </Badge>
+                <p className="text-sm text-muted-foreground">
+                  <Clock className="mr-1 inline h-3 w-3" aria-hidden="true" />
+                  Submitted {formatDate(myProposal.createdAt)}
+                </p>
+                {myProposal.status === "pending" && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={busyId === myProposal.id}
+                    onClick={() => void updateProposalStatus(myProposal, "withdrawn")}
+                  >
+                    Withdraw proposal
+                  </Button>
+                )}
+              </div>
+            ) : project.status === "open" ? (
+              isAuthenticated ? (
+                <Button className="w-full" asChild>
+                  <Link href={`/dashboard/freelancing/gig/${project.id}/apply`}>
+                    <SendHorizontal className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Submit a Proposal
+                  </Link>
+                </Button>
+              ) : (
+                <Button className="w-full" asChild>
+                  <Link href="/auth/signin">Sign in to submit a proposal</Link>
+                </Button>
+              )
+            ) : (
+              <p className="text-center text-sm text-muted-foreground">
+                This project is not accepting proposals.
+              </p>
             )}
           </div>
-        </div>
+        </aside>
       </div>
-    </div>
+    </>,
   );
 }

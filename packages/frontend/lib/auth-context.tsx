@@ -1,180 +1,150 @@
-// Authentication context for managing user login state
-'use client';
+"use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { userApi } from './api-client';
-import { toast } from 'sonner';
-import { 
-  getAuthToken, 
-  setAuthToken, 
-  getUserFromStorage, 
-  setUserInStorage, 
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { toast } from "sonner";
+import { userApi } from "./api-client";
+import {
   clearAuthData,
-  getAuthHeaders 
-} from './auth-utils';
+  getAuthToken,
+  getUserFromStorage,
+  setAuthToken,
+  setUserInStorage,
+} from "./auth-utils";
+import type { AuthUser, SignupPayload } from "./types";
 
-// Import the URL directly
-const USER_SERVICE_URL = process.env.NEXT_PUBLIC_USER_SERVICE_URL || 'http://localhost:4002';
-
-// Types
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  // Add other user properties as needed
-}
-
-interface AuthContextType {
-  user: User | null;
+export interface AuthContextType {
+  user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  signup: (userData: any) => Promise<boolean>;
-  logout: () => void;
   isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  signup: (payload: SignupPayload) => Promise<boolean>;
+  logout: () => void;
+  /** Saves profile changes and refreshes the session user. Returns an error message on failure. */
+  updateProfile: (changes: ProfileChanges) => Promise<string | null>;
 }
 
-// Create context
+export interface ProfileChanges {
+  name?: string;
+  bio?: string | null;
+  skills?: string[];
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  
-  // Check for existing session on mount and validate token with backend
+
+  // Restore the session from storage, then validate it with the user service.
   useEffect(() => {
-    const checkAuthStatus = async () => {
-      try {
-        const storedToken = getAuthToken();
-        const storedUser = getUserFromStorage();
-        
-        if (storedToken && storedUser) {
-          // Set from localStorage first for immediate UI update
-          setToken(storedToken);
-          try {
-            setUser(storedUser);
-            
-            // Validate token with backend
-            const response = await fetch(`${USER_SERVICE_URL}/user/profile`, {
-              method: 'GET',
-              headers: getAuthHeaders()
-            });
-            
-            if (!response.ok) {
-              // Token invalid - clear session
-              throw new Error('Invalid token');
-            }
-            
-            // Optional: Update user data from backend
-            const userData = await response.json();
-            if (userData.success) {
-              setUser(userData.user);
-            }
-          } catch (e) {
-            console.error('Auth validation failed:', e);
-            // Clear invalid session
-            clearAuthData();
-            setUser(null);
-            setToken(null);
-          }
-        }
-      } finally {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      const storedToken = getAuthToken();
+      if (!storedToken) {
         setIsLoading(false);
+        return;
       }
+
+      setToken(storedToken);
+      setUser(getUserFromStorage());
+
+      const result = await userApi.getUserProfile(storedToken);
+      if (cancelled) return;
+
+      if (result.success) {
+        setUser(result.user);
+        setUserInStorage(result.user);
+      } else if (result.status === 401) {
+        // Token missing, expired or invalid: the session is no longer usable.
+        clearAuthData();
+        setUser(null);
+        setToken(null);
+      }
+      // Any other failure (network error, 5xx) keeps the cached session so a
+      // temporarily unavailable user service does not log people out.
+      setIsLoading(false);
     };
-    
-    checkAuthStatus();
+
+    void restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Login function
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const response = await userApi.login({ email, password });
-      
-      if (response.success && response.data && response.data.token) {
-        // Store token
-        const token = response.data.token;
-        setToken(token);
-        
-        // Create standardized user object
-        const userData = {
-          ...response.data.user,
-          // Ensure we have the correct field names from backend 
-        };
-        
-        setUser(userData);
-        
-        // Store in localStorage using auth utilities
-        setAuthToken(token);
-        setUserInStorage(userData);
-        
-        toast.success('Login successful');
-        return true;
-      } else {
-        toast.error('Login failed');
+      const result = await userApi.login({ email, password });
+      if (!result.success || !result.token || !result.user) {
+        toast.error(result.success ? "Login failed" : result.message || "Login failed");
         return false;
       }
-    } catch (error: any) {
-      console.error('Login error:', error);
-      toast.error(error.message || 'Login failed');
-      return false;
+      setToken(result.token);
+      setUser(result.user);
+      setAuthToken(result.token);
+      setUserInStorage(result.user);
+      toast.success("Login successful");
+      return true;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Signup function
-  const signup = async (userData: any): Promise<boolean> => {
+  const signup = useCallback(async (payload: SignupPayload): Promise<boolean> => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const response = await userApi.signup(userData);
-      
-      if (response.success) {
-        toast.success('Account created successfully! Please log in.');
-        return true;
-      } else {
-        toast.error('Sign up failed');
+      const result = await userApi.signup(payload);
+      if (!result.success) {
+        toast.error(result.message || "Sign up failed");
         return false;
       }
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      toast.error(error.message || 'Sign up failed');
-      return false;
+      toast.success("Account created successfully! Please log in.");
+      return true;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Logout function
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     setToken(null);
-    clearAuthData(); // Uses auth utilities to clear all auth data
-    toast.success('Logged out successfully');
-  };
+    clearAuthData();
+    toast.success("Logged out successfully");
+  }, []);
 
-  const value = {
-    user,
-    token,
-    isLoading,
-    login,
-    signup,
-    logout,
-    isAuthenticated: !!user,
-  };
+  const updateProfile = useCallback(async (changes: ProfileChanges): Promise<string | null> => {
+    const result = await userApi.updateProfile(changes);
+    if (!result.success) return result.message || "Failed to update profile";
+    setUser(result.user);
+    setUserInStorage(result.user);
+    return null;
+  }, []);
+
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      token,
+      isLoading,
+      isAuthenticated: !!user && !!token,
+      login,
+      signup,
+      logout,
+      updateProfile,
+    }),
+    [user, token, isLoading, login, signup, logout, updateProfile],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Hook to use the auth context
-export const useAuth = (): AuthContextType => {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-};
+}

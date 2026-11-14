@@ -1,40 +1,85 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Plus, X, Calendar, MapPin, Users, DollarSign, Video, Upload, Eye } from "lucide-react"
-import Link from "next/link"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { eventApi } from "@/lib/api-client"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import {
+  ArrowLeft,
+  Plus,
+  X,
+  Calendar,
+  MapPin,
+  Users,
+  DollarSign,
+  Video,
+  Image as ImageIcon,
+  Eye,
+} from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { eventApi } from "@/lib/api-client";
+import { useUser } from "@/lib/user-context";
+import { EVENT_TYPE_LABELS, buildEventDescription, toIsoDateTime } from "@/lib/event-helpers";
+import { EVENT_TYPES } from "@/lib/types";
+import type { CreateEventPayload, EventType } from "@/lib/types";
+import { LoadingState } from "@/components/page-state";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  "web-development": "Web Development",
+  "mobile-development": "Mobile Development",
+  "ai-ml": "AI & Machine Learning",
+  blockchain: "Blockchain",
+  "data-science": "Data Science",
+  devops: "DevOps & Cloud",
+  cybersecurity: "Cybersecurity",
+  "ui-ux": "UI/UX Design",
+  startup: "Startup & Entrepreneurship",
+};
+
+function isValidUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 export default function CreateEventPage() {
-  const router = useRouter()
-  const [speakers, setSpeakers] = useState<string[]>([])
-  const [newSpeaker, setNewSpeaker] = useState("")
-  const [tags, setTags] = useState<string[]>([])
-  const [newTag, setNewTag] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter();
+  const { user, isLoading: isUserLoading } = useUser();
+  const [speakers, setSpeakers] = useState<string[]>([]);
+  const [newSpeaker, setNewSpeaker] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    eventType: "",
+    eventType: "" as EventType | "",
     category: "",
     startDate: "",
     startTime: "",
     endDate: "",
     endTime: "",
-    timezone: "UTC-8",
+    timezone: "UTC+0",
     isOnline: true,
     venue: "",
     address: "",
@@ -48,85 +93,138 @@ export default function CreateEventPage() {
     agenda: "",
     requirements: "",
     isPublic: true,
-    allowWaitlist: true,
-    sendReminders: true,
-    recordSession: false,
-  })
+    coverImage: "",
+  });
 
-  const handleInputChange = (field: string, value: string | boolean | number) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
+  useEffect(() => {
+    if (!isUserLoading && !user) router.replace("/auth/signin");
+  }, [isUserLoading, user, router]);
+
+  type FormData = typeof formData;
+  const handleInputChange = <K extends keyof FormData>(field: K, value: FormData[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   const addSpeaker = () => {
     if (newSpeaker.trim() && !speakers.includes(newSpeaker.trim())) {
-      setSpeakers([...speakers, newSpeaker.trim()])
-      setNewSpeaker("")
+      setSpeakers([...speakers, newSpeaker.trim()]);
+      setNewSpeaker("");
     }
-  }
+  };
 
   const removeSpeaker = (speakerToRemove: string) => {
-    setSpeakers(speakers.filter((speaker) => speaker !== speakerToRemove))
-  }
+    setSpeakers(speakers.filter((speaker) => speaker !== speakerToRemove));
+  };
 
   const addTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()])
-      setNewTag("")
+      setTags([...tags, newTag.trim()]);
+      setNewTag("");
     }
-  }
+  };
 
   const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove))
-  }
+    setTags(tags.filter((tag) => tag !== tagToRemove));
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-
-    try {
-      // Get auth token - for now using mock
-      const token = "mock-token" // This should come from auth context
-      
-      // Prepare event data for the backend API
-      const eventData = {
-        title: formData.title,
-        description: formData.description,
-        startDateTime: new Date(`${formData.startDate}T${formData.startTime}`),
-        endDateTime: new Date(`${formData.endDate}T${formData.endTime}`),
-        eventType: formData.eventType,
-        maxAttendees: formData.maxAttendees ? parseInt(formData.maxAttendees) : undefined,
-        organizerId: "mock-organizer-id", // This should come from auth context
-        venue: formData.isOnline ? undefined : formData.venue,
-        onlineLink: formData.isOnline ? formData.onlineLink : undefined,
-        tags: tags,
-        isActive: true,
-        isPublished: formData.isPublic,
-      }
-
-      console.log("Creating event:", eventData)
-      
-      // Call the actual API
-      const response = await eventApi.createEvent(eventData, token)
-      
-      if (response.success) {
-        router.push("/dashboard/events?tab=hosting")
-      } else {
-        throw new Error("Failed to create event")
-      }
-    } catch (error) {
-      console.error("Failed to create event:", error)
-      alert("Failed to create event. Please try again.")
-    } finally {
-      setIsLoading(false)
+  const submitEvent = async (publish: boolean) => {
+    if (!formData.eventType) {
+      toast.error("Please select an event type.");
+      return;
     }
+    if (formData.title.trim().length < 3) {
+      toast.error("Title must be at least 3 characters.");
+      return;
+    }
+    if (formData.description.trim().length < 10) {
+      toast.error("Description must be at least 10 characters.");
+      return;
+    }
+    const startDateTime = toIsoDateTime(formData.startDate, formData.startTime, formData.timezone);
+    if (!startDateTime) {
+      toast.error("Please provide a valid start date and time.");
+      return;
+    }
+    const endDateTime =
+      formData.endDate && formData.endTime
+        ? toIsoDateTime(formData.endDate, formData.endTime, formData.timezone)
+        : null;
+    if (endDateTime && new Date(endDateTime) <= new Date(startDateTime)) {
+      toast.error("The event must end after it starts.");
+      return;
+    }
+    if (formData.isOnline && !isValidUrl(formData.onlineLink)) {
+      toast.error("Please provide a valid meeting link (https://...).");
+      return;
+    }
+    if (formData.coverImage && !isValidUrl(formData.coverImage)) {
+      toast.error("Cover image must be a valid URL.");
+      return;
+    }
+    const maxAttendees =
+      formData.registrationRequired && formData.maxAttendees
+        ? Number.parseInt(formData.maxAttendees, 10)
+        : undefined;
+    if (maxAttendees !== undefined && (!Number.isFinite(maxAttendees) || maxAttendees <= 0)) {
+      toast.error("Maximum attendees must be a positive number.");
+      return;
+    }
+
+    const payload: CreateEventPayload = {
+      title: formData.title.trim(),
+      description: buildEventDescription(formData.description, {
+        category: CATEGORY_LABELS[formData.category],
+        address: formData.isOnline ? undefined : formData.address,
+        speakers,
+        agenda: formData.agenda,
+        requirements: formData.requirements,
+        ticketPrice: formData.isPaid ? formData.ticketPrice : undefined,
+        currency: formData.currency,
+        registrationDeadline: formData.registrationRequired
+          ? formData.registrationDeadline
+          : undefined,
+      }),
+      startDateTime,
+      endDateTime: endDateTime ?? undefined,
+      eventType: formData.eventType,
+      maxAttendees,
+      venue: formData.isOnline ? undefined : formData.venue.trim() || undefined,
+      onlineLink: formData.isOnline ? formData.onlineLink.trim() : undefined,
+      coverImage: formData.coverImage.trim() || undefined,
+      tags,
+      isPublished: publish && formData.isPublic,
+    };
+
+    setIsLoading(true);
+    const response = await eventApi.createEvent(payload);
+    setIsLoading(false);
+
+    if (response.success) {
+      toast.success(publish ? "Event published!" : "Draft saved");
+      router.push("/dashboard/events");
+    } else if (response.status === 401) {
+      toast.error("Your session has expired. Please sign in again.");
+      router.push("/auth/signin");
+    } else {
+      toast.error(response.message || "Failed to create event");
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submitEvent(true);
+  };
+
+  if (isUserLoading || !user) {
+    return <LoadingState />;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center space-x-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/events">
-            <ArrowLeft className="h-4 w-4" />
+          <Link href="/dashboard/events" aria-label="Back to events">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </Link>
         </Button>
         <div>
@@ -160,26 +258,30 @@ export default function CreateEventPage() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="eventType">Event Type *</Label>
-                    <Select value={formData.eventType} onValueChange={(value) => handleInputChange("eventType", value)}>
-                      <SelectTrigger>
+                    <Select
+                      value={formData.eventType}
+                      onValueChange={(value) => handleInputChange("eventType", value as EventType)}
+                    >
+                      <SelectTrigger id="eventType">
                         <SelectValue placeholder="Select event type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="hackathon">🏆 Hackathon</SelectItem>
-                        <SelectItem value="meetup">🤝 Meetup</SelectItem>
-                        <SelectItem value="webinar">💻 Webinar</SelectItem>
-                        <SelectItem value="conference">🎤 Conference</SelectItem>
-                        <SelectItem value="workshop">🛠️ Workshop</SelectItem>
-                        <SelectItem value="networking">🌐 Networking</SelectItem>
-                        <SelectItem value="bootcamp">📚 Bootcamp</SelectItem>
+                        {EVENT_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {EVENT_TYPE_LABELS[type]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="category">Category *</Label>
-                    <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
-                      <SelectTrigger>
+                    <Label htmlFor="category">Category</Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(value) => handleInputChange("category", value)}
+                    >
+                      <SelectTrigger id="category">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
@@ -210,16 +312,22 @@ export default function CreateEventPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Event Tags</Label>
+                  <Label htmlFor="new-tag">Event Tags</Label>
                   <div className="flex gap-2">
                     <Input
+                      id="new-tag"
                       placeholder="Add a tag (e.g., React, AI, Startup)"
                       value={newTag}
                       onChange={(e) => setNewTag(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addTag();
+                        }
+                      }}
                     />
-                    <Button type="button" onClick={addTag} size="icon">
-                      <Plus className="h-4 w-4" />
+                    <Button type="button" onClick={addTag} size="icon" aria-label="Add tag">
+                      <Plus className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                   {tags.length > 0 && (
@@ -233,8 +341,9 @@ export default function CreateEventPage() {
                             size="icon"
                             className="h-4 w-4 p-0 hover:bg-transparent"
                             onClick={() => removeTag(tag)}
+                            aria-label={`Remove tag ${tag}`}
                           >
-                            <X className="h-3 w-3" />
+                            <X className="h-3 w-3" aria-hidden="true" />
                           </Button>
                         </Badge>
                       ))}
@@ -276,31 +385,32 @@ export default function CreateEventPage() {
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="endDate">End Date *</Label>
+                    <Label htmlFor="endDate">End Date</Label>
                     <Input
                       id="endDate"
                       type="date"
                       value={formData.endDate}
                       onChange={(e) => handleInputChange("endDate", e.target.value)}
-                      required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="endTime">End Time *</Label>
+                    <Label htmlFor="endTime">End Time</Label>
                     <Input
                       id="endTime"
                       type="time"
                       value={formData.endTime}
                       onChange={(e) => handleInputChange("endTime", e.target.value)}
-                      required
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="timezone">Timezone</Label>
-                  <Select value={formData.timezone} onValueChange={(value) => handleInputChange("timezone", value)}>
-                    <SelectTrigger>
+                  <Select
+                    value={formData.timezone}
+                    onValueChange={(value) => handleInputChange("timezone", value)}
+                  >
+                    <SelectTrigger id="timezone">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -359,7 +469,7 @@ export default function CreateEventPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="address">Address *</Label>
+                      <Label htmlFor="address">Address</Label>
                       <div className="relative">
                         <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -368,7 +478,6 @@ export default function CreateEventPage() {
                           value={formData.address}
                           onChange={(e) => handleInputChange("address", e.target.value)}
                           className="pl-10"
-                          required={!formData.isOnline}
                         />
                       </div>
                     </div>
@@ -388,7 +497,9 @@ export default function CreateEventPage() {
                   <Switch
                     id="registrationRequired"
                     checked={formData.registrationRequired}
-                    onCheckedChange={(checked) => handleInputChange("registrationRequired", checked)}
+                    onCheckedChange={(checked) =>
+                      handleInputChange("registrationRequired", checked)
+                    }
                   />
                   <Label htmlFor="registrationRequired">Registration required</Label>
                 </div>
@@ -403,6 +514,7 @@ export default function CreateEventPage() {
                           <Input
                             id="maxAttendees"
                             type="number"
+                            min="1"
                             placeholder="100"
                             value={formData.maxAttendees}
                             onChange={(e) => handleInputChange("maxAttendees", e.target.value)}
@@ -416,7 +528,9 @@ export default function CreateEventPage() {
                           id="registrationDeadline"
                           type="date"
                           value={formData.registrationDeadline}
-                          onChange={(e) => handleInputChange("registrationDeadline", e.target.value)}
+                          onChange={(e) =>
+                            handleInputChange("registrationDeadline", e.target.value)
+                          }
                         />
                       </div>
                     </div>
@@ -454,7 +568,7 @@ export default function CreateEventPage() {
                               value={formData.currency}
                               onValueChange={(value) => handleInputChange("currency", value)}
                             >
-                              <SelectTrigger>
+                              <SelectTrigger id="currency">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -467,15 +581,6 @@ export default function CreateEventPage() {
                           </div>
                         </div>
                       )}
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="allowWaitlist"
-                        checked={formData.allowWaitlist}
-                        onCheckedChange={(checked) => handleInputChange("allowWaitlist", checked as boolean)}
-                      />
-                      <Label htmlFor="allowWaitlist">Allow waitlist when event is full</Label>
                     </div>
                   </>
                 )}
@@ -490,16 +595,22 @@ export default function CreateEventPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Speakers & Presenters</Label>
+                  <Label htmlFor="new-speaker">Speakers & Presenters</Label>
                   <div className="flex gap-2">
                     <Input
+                      id="new-speaker"
                       placeholder="Add speaker name"
                       value={newSpeaker}
                       onChange={(e) => setNewSpeaker(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSpeaker())}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addSpeaker();
+                        }
+                      }}
                     />
-                    <Button type="button" onClick={addSpeaker} size="icon">
-                      <Plus className="h-4 w-4" />
+                    <Button type="button" onClick={addSpeaker} size="icon" aria-label="Add speaker">
+                      <Plus className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                   {speakers.length > 0 && (
@@ -513,8 +624,9 @@ export default function CreateEventPage() {
                             size="icon"
                             className="h-4 w-4 p-0 hover:bg-transparent"
                             onClick={() => removeSpeaker(speaker)}
+                            aria-label={`Remove speaker ${speaker}`}
                           >
-                            <X className="h-3 w-3" />
+                            <X className="h-3 w-3" aria-hidden="true" />
                           </Button>
                         </Badge>
                       ))}
@@ -549,30 +661,10 @@ export default function CreateEventPage() {
                     <Checkbox
                       id="isPublic"
                       checked={formData.isPublic}
-                      onCheckedChange={(checked) => handleInputChange("isPublic", checked as boolean)}
+                      onCheckedChange={(checked) => handleInputChange("isPublic", checked === true)}
                     />
                     <Label htmlFor="isPublic">Make this event public (visible to everyone)</Label>
                   </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="sendReminders"
-                      checked={formData.sendReminders}
-                      onCheckedChange={(checked) => handleInputChange("sendReminders", checked as boolean)}
-                    />
-                    <Label htmlFor="sendReminders">Send email reminders to attendees</Label>
-                  </div>
-
-                  {formData.isOnline && (
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="recordSession"
-                        checked={formData.recordSession}
-                        onCheckedChange={(checked) => handleInputChange("recordSession", checked as boolean)}
-                      />
-                      <Label htmlFor="recordSession">Record session for later viewing</Label>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -593,23 +685,19 @@ export default function CreateEventPage() {
                   <h3 className="font-semibold text-lg">{formData.title || "Event Title"}</h3>
                   <div className="flex items-center gap-2 mt-1">
                     {formData.eventType && (
-                      <Badge variant="secondary">
-                        {formData.eventType === "hackathon" && "🏆 Hackathon"}
-                        {formData.eventType === "meetup" && "🤝 Meetup"}
-                        {formData.eventType === "webinar" && "💻 Webinar"}
-                        {formData.eventType === "conference" && "🎤 Conference"}
-                        {formData.eventType === "workshop" && "🛠️ Workshop"}
-                        {formData.eventType === "networking" && "🌐 Networking"}
-                        {formData.eventType === "bootcamp" && "📚 Bootcamp"}
-                      </Badge>
+                      <Badge variant="secondary">{EVENT_TYPE_LABELS[formData.eventType]}</Badge>
                     )}
                     {formData.isPaid && (
-                      <Badge variant="outline">{formData.ticketPrice ? `$${formData.ticketPrice}` : "Paid"}</Badge>
+                      <Badge variant="outline">
+                        {formData.ticketPrice ? `$${formData.ticketPrice}` : "Paid"}
+                      </Badge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
                     {formData.description
-                      ? formData.description.substring(0, 150) + "..."
+                      ? formData.description.length > 150
+                        ? `${formData.description.substring(0, 150)}...`
+                        : formData.description
                       : "Event description will appear here..."}
                   </p>
                 </div>
@@ -631,7 +719,9 @@ export default function CreateEventPage() {
                     ) : (
                       <MapPin className="h-4 w-4 text-muted-foreground" />
                     )}
-                    <span>{formData.isOnline ? "Online Event" : formData.venue || "Venue not set"}</span>
+                    <span>
+                      {formData.isOnline ? "Online Event" : formData.venue || "Venue not set"}
+                    </span>
                   </div>
                   {formData.maxAttendees && (
                     <div className="flex items-center gap-2 text-sm">
@@ -678,17 +768,21 @@ export default function CreateEventPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Event Image</CardTitle>
-                <CardDescription>Upload a cover image for your event</CardDescription>
+                <CardDescription>Link to a cover image for your event</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
-                  <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground mb-2">Upload event cover image</p>
-                  <Button variant="outline" size="sm">
-                    Choose Image
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-2">Recommended: 1200x630px, JPG or PNG</p>
-                </div>
+              <CardContent className="space-y-2">
+                <Label htmlFor="coverImage" className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" aria-hidden="true" />
+                  Cover image URL
+                </Label>
+                <Input
+                  id="coverImage"
+                  type="url"
+                  placeholder="https://example.com/cover.jpg"
+                  value={formData.coverImage}
+                  onChange={(e) => handleInputChange("coverImage", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Recommended: 1200x630px, JPG or PNG</p>
               </CardContent>
             </Card>
 
@@ -723,7 +817,12 @@ export default function CreateEventPage() {
           <Button type="button" variant="outline" asChild>
             <Link href="/dashboard/events">Cancel</Link>
           </Button>
-          <Button type="button" variant="outline">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isLoading}
+            onClick={() => void submitEvent(false)}
+          >
             Save as Draft
           </Button>
           <Button type="submit" disabled={isLoading}>
@@ -732,5 +831,5 @@ export default function CreateEventPage() {
         </div>
       </form>
     </div>
-  )
+  );
 }

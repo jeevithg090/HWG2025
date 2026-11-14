@@ -1,107 +1,49 @@
-# Frontend-Backend Integration Guide
+# Frontend–Backend Integration
 
-This guide provides information about how the frontend connects with various backend services in the HWG2025 application.
+The frontend talks to three backend services. Their base URLs are configured in
+one place, `lib/config.ts`, from these build-time variables (see `.env.example`):
 
-## API Client Structure
+| Service           | Variable                            | Default                 |
+| ----------------- | ----------------------------------- | ----------------------- |
+| User service      | `NEXT_PUBLIC_USER_SERVICE_URL`      | `http://localhost:4000` |
+| Freelance service | `NEXT_PUBLIC_FREELANCE_SERVICE_URL` | `http://localhost:4001` |
+| Event service     | `NEXT_PUBLIC_EVENT_SERVICE_URL`     | `http://localhost:4002` |
 
-The frontend uses a centralized API client located in `lib/api-client.ts` that handles all communication with backend services. The client is structured into separate modules for each service:
+`NEXT_PUBLIC_*` values are inlined at build time, so rebuild after changing them
+(the Dockerfile accepts them as build args).
 
-- `userApi`: Handles authentication and user-related operations
-- `eventApi`: Manages event-related operations
-- `freelanceApi`: Handles freelancing features (projects, proposals, etc.)
+## API client (`lib/api-client.ts`)
 
-## Backend Services
+- `userApi`: `signup`, `login`, `getUserProfile`, `updateProfile`
+- `freelanceApi`: gigs, gig search, proposals, reviews, client/freelancer dashboards
+- `eventApi`: events CRUD, register/cancel, attendees, mark attendance, a user's registrations
 
-The application connects to multiple backend services:
+Every call resolves (never throws) to either
+`{ success: true, status, ...body }` — the service's own success payload, e.g.
+`result.data` for the freelance service or `result.events` / `result.event` for the
+event service — or `{ success: false, status, message, errors? }`.
+`status === 0` means the request never reached the server.
 
-1. **User Service**: Handles authentication, registration, and user profiles
-   - Default URL: `http://localhost:4002`
+Writes (POST/PUT/PATCH/DELETE) and other protected endpoints are sent with
+`Authorization: Bearer <token>`; when no token is stored the client returns a
+401 result without calling the service. The services derive the acting user
+(`clientId`, `freelancerId`, `reviewerId`, `organizerId`, attendee id/email) from
+the token, so the frontend does not send those ids.
 
-2. **Event Service**: Manages events, registrations, etc.
-   - Default URL: `http://localhost:4002`
+Validation errors (`{ message: "VALIDATION_ERROR", errors: [{ path, message }] }`)
+are turned into a readable message.
 
-3. **Freelance Service**: Manages gigs (projects), proposals, and reviews
-   - Default URL: `http://localhost:4001`
+## Authentication
 
-## Authentication Flow
+- `lib/auth-context.tsx` stores the JWT and user in `localStorage`
+  (`lib/auth-utils.ts`) after login.
+- On load it validates the stored session with `GET /user/profile`. The session is
+  cleared only on a 401; network or server errors keep the cached session.
+- `lib/user-context.tsx` derives the dashboard view of the user (role flags such as
+  `canPostGigs`) from the auth context.
 
-Authentication is managed through JWT tokens which are:
-- Obtained during login via the User Service
-- Stored in localStorage using the `auth-utils.ts` utilities
-- Attached to API requests using the `getAuthHeaders()` function
+## Notes
 
-### Key Auth Utilities
-
-- `getAuthToken()`: Retrieves the token from localStorage
-- `setAuthToken()`: Saves the token to localStorage
-- `removeAuthToken()`: Removes the token from localStorage
-- `isAuthenticated()`: Checks if a token exists
-- `getAuthHeaders()`: Creates headers with Authorization token
-- `handleUnauthorizedResponse()`: Handles 401 unauthorized responses
-
-## Data Flow Examples
-
-### User Login Flow:
-
-1. User enters credentials
-2. Frontend calls `userApi.login(credentials)`
-3. Backend validates credentials and returns token
-4. Token is stored using `setAuthToken()`
-5. User data is stored using `setUserInStorage()`
-6. User is redirected to dashboard
-
-### Freelancer Project List Flow:
-
-1. User navigates to freelancing page
-2. Page calls `fetchProjects()` from dashboard helpers
-3. Helper retrieves token using `getAuthToken()` 
-4. API call is made to Freelance Service with token
-5. Projects are displayed to user
-
-### Project Creation Flow:
-
-1. Client submits new project form
-2. Form handler calls `freelanceApi.createProject(projectData, token)`
-3. Token is attached to request headers
-4. Project is created in the Freelance Service
-5. User is redirected to project management page
-
-## Error Handling
-
-The application centralizes error handling using:
-- `handleApiError()` in auth-utils.ts
-- Toast notifications for user feedback
-- Automatic handling of authentication errors
-
-## Testing Connections
-
-You can test the API connections using the `test-api-connection.js` utility. Run it with Node.js:
-
-```bash
-node lib/test-api-connection.js
-```
-
-## Common Issues
-
-1. **401 Unauthorized**: 
-   - Check if token is expired or invalid
-   - Ensure localStorage has a valid token
-   - Verify the token is being sent in request headers
-
-2. **CORS Errors**:
-   - Ensure backend services have proper CORS configuration
-   - Check that frontend is using correct backend URLs
-
-3. **Network Errors**:
-   - Verify all services are running
-   - Check Docker containers or process status
-   - Verify network connectivity between services
-
-## Environment Variables
-
-The API client uses environment variables to determine service URLs:
-
-- `NEXT_PUBLIC_API_BASE_URL`: Base API URL
-- `NEXT_PUBLIC_USER_SERVICE_URL`: User service URL
-- `NEXT_PUBLIC_EVENT_SERVICE_URL`: Event service URL
-- `NEXT_PUBLIC_FREELANCE_SERVICE_URL`: Freelance service URL
+- The community chat (`lib/chat-context.tsx`) is a client-side demo with mock data;
+  there is no chat service yet.
+- Run the unit tests with `npm test`.
