@@ -174,18 +174,19 @@ function CommunityContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Community Hub</h1>
-          <p className="text-muted-foreground flex items-center gap-2">
+          <p className="text-muted-foreground flex flex-wrap items-center gap-2">
             Connect and collaborate with the tech community
-            <div
-              className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
-            ></div>
+            <span
+              aria-hidden="true"
+              className={`inline-block w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
+            />
             <span className="text-xs">{isConnected ? "Connected" : "Disconnected"}</span>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="gap-2">
             <UserPlus className="h-4 w-4" />
             Invite Members

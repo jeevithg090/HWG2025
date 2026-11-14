@@ -17,7 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <ChatProvider>
         <SidebarProvider>
           <AppSidebar />
-          <SidebarInset>
+          <SidebarInset className="min-w-0">
             <DashboardHeader />
             <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
           </SidebarInset>
