@@ -373,17 +373,19 @@ export default function ManageEventPage() {
                   {filteredAttendees.map((attendee) => (
                     <li
                       key={attendee.id}
-                      className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <Avatar>
                           <AvatarFallback>
                             {getInitials(attendee.userName || attendee.userEmail)}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="font-medium">{attendee.userName || attendee.userEmail}</p>
-                          <p className="text-sm text-muted-foreground">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {attendee.userName || attendee.userEmail}
+                          </p>
+                          <p className="break-words text-sm text-muted-foreground">
                             {attendee.userEmail} • Registered {formatDate(attendee.createdAt)}
                           </p>
                         </div>

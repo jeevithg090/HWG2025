@@ -52,9 +52,13 @@ export function DashboardHeader() {
   return (
     <header className="border-b bg-white px-4 py-3 dark:bg-gray-900 sm:px-6">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center space-x-4">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
           <SidebarTrigger />
-          <form onSubmit={handleSearch} className="relative hidden sm:block" role="search">
+          <form
+            onSubmit={handleSearch}
+            className="relative hidden min-w-0 max-w-xs flex-1 sm:block"
+            role="search"
+          >
             <Search
               className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground"
               aria-hidden="true"
@@ -62,19 +66,19 @@ export function DashboardHeader() {
             <Input
               placeholder="Search projects..."
               aria-label="Search projects"
-              className="w-48 pl-10 md:w-64"
+              className="w-full pl-10"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </form>
         </div>
 
-        <div className="flex items-center space-x-2 sm:space-x-4">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" className="gap-2">
+              <Button size="sm" className="gap-2" aria-label="Create">
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                Create
+                <span className="hidden sm:inline">Create</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
