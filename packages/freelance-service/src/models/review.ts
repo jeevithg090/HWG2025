@@ -1,32 +1,30 @@
-// src/models/review.ts
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  JoinColumn,
-} from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import Model from "./base";
 import { Gig } from "./gig";
 
 @Entity()
+@Index(["gigId", "reviewerId"], { unique: true, where: '"deletedAt" IS NULL' })
 export class Review extends Model {
   @Column("uuid")
   gigId!: string;
 
-  @ManyToOne(() => Gig, (gig) => gig.reviews)
+  @ManyToOne(() => Gig, (gig) => gig.reviews, { onDelete: "CASCADE" })
   @JoinColumn({ name: "gigId" })
-  gig!: Gig;
+  gig?: Gig;
 
+  /** User giving the review. */
   @Column("uuid")
-  reviewerId!: string; // User who is giving the review
+  reviewerId!: string;
 
+  /** User receiving the review. */
+  @Index()
   @Column("uuid")
-  revieweeId!: string; // User who is receiving the review
+  revieweeId!: string;
 
+  /** 1–5 stars. */
   @Column("integer")
-  rating!: number; // 1-5 stars
+  rating!: number;
 
   @Column("text", { nullable: true })
-  comment?: string;
+  comment?: string | null;
 }

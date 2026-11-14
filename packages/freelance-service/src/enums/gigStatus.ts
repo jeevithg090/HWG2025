@@ -1,4 +1,3 @@
-// src/enums/gigStatus.ts
 export enum GigStatus {
   OPEN = "open",
   IN_PROGRESS = "in_progress",

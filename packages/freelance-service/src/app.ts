@@ -1,42 +1,44 @@
-import express, { Request, Response, NextFunction } from "express";
-import { gigRoutes } from "./routes/gigRoutes";
-import { proposalRoutes } from "./routes/proposalRoutes";
-import { reviewRoutes } from "./routes/reviewRoutes";
-import { dashboardRoutes } from "./routes/dashboardRoutes";
-import logger from "./common/logger";
+import cors from "cors";
+import express, { Application, Request, Response } from "express";
+import helmet from "helmet";
+import config from "./config/config";
+import { errorHandler, notFoundHandler } from "./common/errors";
+import { typeormRepositories } from "./repository/typeorm";
+import { Repositories } from "./repository/types";
+import { createDashboardRouter } from "./routes/dashboardRoutes";
+import { createGigRouter } from "./routes/gigRoutes";
+import { createProposalRouter } from "./routes/proposalRoutes";
+import { createReviewRouter } from "./routes/reviewRoutes";
+import { DashboardService } from "./services/dashboardService";
+import { GigService } from "./services/gigService";
+import { ProposalService } from "./services/proposalService";
+import { ReviewService } from "./services/reviewService";
 
-const app = express();
+export const createApp = (repos: Repositories = typeormRepositories): Application => {
+  const app = express();
 
-// Middleware
-app.use(express.json());
-
-// Request logging middleware
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  logger.info(`${req.method} ${req.url}`);
-  next();
-});
-
-// Health check endpoint
-app.get("/health", (_req: Request, res: Response) => {
-  res.status(200).json({ status: "UP", service: "freelance-service" });
-});
-
-// API Routes
-app.use("/gigs", gigRoutes);
-app.use("/proposals", proposalRoutes);
-app.use("/reviews", reviewRoutes);
-app.use("/dashboard", dashboardRoutes);
-
-// Error handling middleware
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
-  logger.error(
-    `Error processing request ${req.method} ${req.url}: ${err.message}`
+  app.disable("x-powered-by");
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: config.corsOrigins,
+      methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
+      credentials: true,
+    }),
   );
+  app.use(express.json({ limit: "100kb" }));
 
-  res.status(500).json({
-    status: "error",
-    message: "An unexpected error occurred",
+  app.get("/health", (_req: Request, res: Response) => {
+    res.json({ success: true, status: "UP", service: "freelance-service" });
   });
-});
 
-export default app;
+  app.use("/gigs", createGigRouter(new GigService(repos.gigs)));
+  app.use("/proposals", createProposalRouter(new ProposalService(repos.proposals, repos.gigs)));
+  app.use("/reviews", createReviewRouter(new ReviewService(repos)));
+  app.use("/dashboard", createDashboardRouter(new DashboardService(repos)));
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+
+  return app;
+};
