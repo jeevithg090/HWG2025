@@ -6,3 +6,9 @@ export enum EventTypes {
   WORKSHOP = "WORKSHOP",
   OTHER = "OTHER",
 }
+
+export enum AttendeeStatus {
+  REGISTERED = "REGISTERED",
+  WAITLISTED = "WAITLISTED",
+  CANCELLED = "CANCELLED",
+}

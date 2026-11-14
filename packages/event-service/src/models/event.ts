@@ -1,4 +1,4 @@
-import { Column, Entity, OneToMany } from "typeorm";
+import { Column, Entity, Index, OneToMany } from "typeorm";
 import { EventTypes } from "../enums/eventTypes";
 import Model from "./base";
 import { EventAttendee } from "./eventAttendee";
@@ -11,45 +11,44 @@ export class Event extends Model {
   @Column("text")
   description!: string;
 
-  @Column()
+  @Index()
+  @Column({ type: "timestamptz" })
   startDateTime!: Date;
 
-  @Column({ nullable: true })
-  endDateTime?: Date;
+  @Column({ type: "timestamptz", nullable: true })
+  endDateTime?: Date | null;
 
-  @Column({ nullable: true })
-  venue?: string;
+  @Column({ type: "varchar", nullable: true })
+  venue?: string | null;
 
-  @Column({ nullable: true })
-  onlineLink?: string;
+  @Column({ type: "varchar", nullable: true })
+  onlineLink?: string | null;
 
-  @Column({
-    type: "enum",
-    enum: EventTypes,
-    default: EventTypes.MEETUP,
-  })
+  @Column({ type: "enum", enum: EventTypes, default: EventTypes.MEETUP })
   eventType!: EventTypes;
 
   @Column({ default: true })
   isActive!: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   isPublished!: boolean;
 
-  @Column({ nullable: true })
-  maxAttendees?: number;
+  @Column({ type: "integer", nullable: true })
+  maxAttendees?: number | null;
 
+  /** Number of REGISTERED (not waitlisted) attendees, kept in sync by EventService. */
   @Column({ default: 0 })
   currentAttendees!: number;
 
-  @Column({ nullable: true })
-  organizerId?: string;
+  @Index()
+  @Column({ type: "varchar", nullable: true })
+  organizerId?: string | null;
 
-  @Column({ nullable: true })
-  coverImage?: string;
+  @Column({ type: "varchar", nullable: true })
+  coverImage?: string | null;
 
   @Column("text", { array: true, nullable: true })
-  tags?: string[];
+  tags?: string[] | null;
 
   @OneToMany(() => EventAttendee, (attendee) => attendee.event)
   attendees?: EventAttendee[];

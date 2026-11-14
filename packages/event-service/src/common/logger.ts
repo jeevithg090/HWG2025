@@ -1,34 +1,25 @@
-import { addColors, createLogger, format, transports } from "winston";
+import { createLogger, format, transports } from "winston";
 
-const { combine, label, timestamp, colorize } = format;
+const SERVICE_NAME = "event-service";
 
 const logger = createLogger({
-  level: "info",
-  defaultMeta: { service: "event-service" },
+  level: process.env.LOG_LEVEL || "info",
+  silent: process.env.NODE_ENV === "test",
+  defaultMeta: { service: SERVICE_NAME },
   transports: [
     new transports.Console({
-      format: combine(
-        colorize({
-          all: true,
-        }),
-        label({ label: "[event-service]" }),
-        timestamp({
-          format: "YY-MM-DD HH:MM:SS",
-        }),
-        format.printf(
-          (info) =>
-            `${info.timestamp} ${info.level} ${info.label} ${info.message}`
-        )
-      ),
+      format:
+        process.env.NODE_ENV === "production"
+          ? format.combine(format.timestamp(), format.json())
+          : format.combine(
+              format.colorize({ all: true }),
+              format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+              format.printf(
+                (info) => `${info.timestamp} ${info.level} [${SERVICE_NAME}] ${info.message}`,
+              ),
+            ),
     }),
   ],
-});
-
-addColors({
-  error: "red",
-  warn: "yellow",
-  info: "cyan",
-  debug: "green",
 });
 
 export default logger;
