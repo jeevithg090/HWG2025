@@ -8,6 +8,33 @@ clients post gigs and hire freelancers, organizers run hackathons, meetups and
 webinars, and members collaborate in community spaces. It started as a
 hackathon project ([original brief](docs/problem-statement.md)).
 
+![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+
+**Who it's for**
+
+- **Clients and startups** who need to hire tech talent for well-defined projects
+- **Freelancers** looking for gigs that match their skills
+- **Community organizers** running hackathons, meetups and webinars
+
+## Screenshots
+
+These were captured from the running app with demo seed data.
+
+| Landing page                                           | Events (public)                                                                                                                                                           |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Landing page](docs/screenshots/landing.png)          | ![Events listing](docs/screenshots/events.png)                                                                                                                            |
+| **Client dashboard**                                   | **Client: manage posted projects**                                                                                                                                        |
+| ![Dashboard](docs/screenshots/dashboard.png)           | ![Client projects](docs/screenshots/client-projects.png)                                                                                                                  |
+| **Freelancer: gig detail with proposal status**        | **Freelancer: find work (dark mode)**                                                                                                                                     |
+| ![Gig detail](docs/screenshots/gig-detail.png)         | ![Find work in dark mode](docs/screenshots/freelancer-dark.png)                                                                                                           |
+| **Organizer: event management and check-in**           | **Mobile (375px)**                                                                                                                                                        |
+| ![Event management](docs/screenshots/event-manage.png) | <img src="docs/screenshots/mobile-events.png" alt="Events on mobile" width="45%"> <img src="docs/screenshots/mobile-dashboard.png" alt="Dashboard on mobile" width="45%"> |
+
 ## Features
 
 **Freelancing** (`freelance-service`)
@@ -51,42 +78,50 @@ hackathon project ([original brief](docs/problem-statement.md)).
 
 ## Tech stack
 
-| Layer     | Technology                                                    |
-| --------- | ------------------------------------------------------------- |
-| Frontend  | Next.js 15 (App Router), React 19, Tailwind CSS, shadcn/ui    |
-| Backend   | Node.js 20, Express 5, TypeScript, Zod validation             |
-| Database  | PostgreSQL 16 via TypeORM                                     |
-| Auth      | JWT (`jsonwebtoken`), bcrypt                                  |
-| Tooling   | ESLint 9, Prettier, Jest + Supertest, Vitest                  |
-| Packaging | Multi-stage Dockerfiles per service, Docker Compose           |
+| Layer     | Technology                                                 |
+| --------- | ---------------------------------------------------------- |
+| Frontend  | Next.js 15 (App Router), React 19, Tailwind CSS, shadcn/ui |
+| Backend   | Node.js 20, Express 5, TypeScript, Zod validation          |
+| Database  | PostgreSQL 16 via TypeORM                                  |
+| Auth      | JWT (`jsonwebtoken`), bcrypt                               |
+| Tooling   | ESLint 9, Prettier, Jest + Supertest, Vitest               |
+| Packaging | Multi-stage Dockerfiles per service, Docker Compose        |
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    Browser["Browser<br/>Next.js frontend :3000"]
+    subgraph APIs["Backend services (Express 5 + TypeORM)"]
+        US["user-service :4000<br/>sign-up, login, profiles<br/><i>issues JWTs</i>"]
+        FS["freelance-service :4001<br/>gigs, proposals, reviews, dashboards"]
+        ES["event-service :4002<br/>events, registration, waitlist"]
+    end
+    DB[("PostgreSQL 16")]
+
+    Browser -- "POST /user/login" --> US
+    Browser -- "Bearer JWT" --> FS
+    Browser -- "Bearer JWT" --> ES
+    US --> DB
+    FS --> DB
+    ES --> DB
+    US -. "shared JWT_SECRET<br/>(tokens verified locally)" .- FS
+    US -. " " .- ES
 ```
-                         ┌──────────────────────────┐
-                         │  frontend (Next.js) :3000│
-                         └──────┬─────────┬─────────┘
-               Bearer JWT       │         │        │
-          ┌─────────────────────┘         │        └──────────────────────┐
-          ▼                               ▼                               ▼
-┌───────────────────┐        ┌──────────────────────┐        ┌───────────────────┐
-│ user-service :4000│        │freelance-service:4001│        │event-service :4002│
-│ signup / login    │        │ gigs, proposals,     │        │ events, attendees,│
-│ issues JWTs       │        │ reviews, dashboards  │        │ waitlist          │
-└─────────┬─────────┘        └──────────┬───────────┘        └─────────┬─────────┘
-          │      all three verify tokens with the shared JWT_SECRET     │
-          └──────────────────────────────┼──────────────────────────────┘
-                                         ▼
-                                ┌─────────────────┐
-                                │  PostgreSQL 16  │
-                                └─────────────────┘
+
+Request lifecycle inside a service:
+
+```mermaid
+flowchart LR
+    R["Route<br/>(Zod validation)"] --> A["requireAuth<br/>(JWT → req.user)"] --> S["Service<br/>(business rules,<br/>ownership checks)"] --> Repo["Repository interface<br/>(TypeORM or in-memory)"] --> PG[("Postgres")]
+    S -- "AppError" --> E["Error handler<br/>{ success:false, message }"]
 ```
 
 - **Independent services.** Each backend is its own npm package with its own
   Dockerfile, so you can deploy and scale them separately. They share one
   Postgres database but use separate tables.
 - **Stateless auth.** `user-service` signs a JWT holding `{ id, name, email,
-  type }`. The other services check the signature locally with the same
+type }`. The other services check the signature locally with the same
   `JWT_SECRET` and take the caller's identity from the token, never from the
   request body.
 - **Layering inside each service:** `routes` (HTTP and Zod validation) →
@@ -101,7 +136,7 @@ hackathon project ([original brief](docs/problem-statement.md)).
 
 ### Prerequisites
 
-- Node.js 20+ and npm 10+
+- Node.js 20.19+ (22 LTS recommended; the frontend test tooling needs a recent Node) and npm 10+
 - PostgreSQL 14+ (or Docker)
 
 ### Option A: Docker Compose (everything)
@@ -199,14 +234,14 @@ All responses are JSON. 🔒 means `Authorization: Bearer <token>` is required.
 <details>
 <summary><strong>user-service</strong> (:4000)</summary>
 
-| Method | Path                 | Description                                                  |
-| ------ | -------------------- | ------------------------------------------------------------ |
-| POST   | `/user/signup`       | `{ name, email, password, type? }` → `201 { success, user }` |
-| POST   | `/user/login`        | `{ email, password }` → `{ success, token, user }`           |
-| GET    | `/user/profile` 🔒   | Current user's profile                                       |
-| PATCH  | `/user/profile` 🔒   | Update `name`, `bio`, `skills`                               |
-| GET    | `/auth/verify-token` 🔒 | Decode and verify a token                                 |
-| GET    | `/health`            | Liveness check                                               |
+| Method | Path                    | Description                                                  |
+| ------ | ----------------------- | ------------------------------------------------------------ |
+| POST   | `/user/signup`          | `{ name, email, password, type? }` → `201 { success, user }` |
+| POST   | `/user/login`           | `{ email, password }` → `{ success, token, user }`           |
+| GET    | `/user/profile` 🔒      | Current user's profile                                       |
+| PATCH  | `/user/profile` 🔒      | Update `name`, `bio`, `skills`                               |
+| GET    | `/auth/verify-token` 🔒 | Decode and verify a token                                    |
+| GET    | `/health`               | Liveness check                                               |
 
 `type` is one of `freelancer` (default), `client` or `startup`. Admin
 accounts cannot be created through sign-up.
@@ -216,51 +251,125 @@ accounts cannot be created through sign-up.
 <details>
 <summary><strong>freelance-service</strong> (:4001)</summary>
 
-| Method | Path                                  | Who                                  |
-| ------ | ------------------------------------- | ------------------------------------ |
-| GET    | `/gigs?page&limit&status`             | Public                               |
-| GET    | `/gigs/search?query&skills=a,b`       | Public                               |
-| GET    | `/gigs/:id`, `/gigs/client/:clientId` | Public                               |
-| POST   | `/gigs` 🔒                            | Clients, startups, admins            |
-| PUT    | `/gigs/:id` 🔒, DELETE `/gigs/:id` 🔒 | Gig owner or admin                   |
-| POST   | `/proposals` 🔒                       | Any user except the gig owner        |
-| GET    | `/proposals/gig/:gigId` 🔒            | Gig owner or admin                   |
-| GET    | `/proposals/freelancer/:id` 🔒        | That freelancer or admin             |
-| GET    | `/proposals/:id` 🔒                   | Author, gig owner or admin           |
-| PUT    | `/proposals/:id` 🔒                   | Author edits/withdraws; owner accepts/rejects |
-| DELETE | `/proposals/:id` 🔒                   | Author or admin                      |
-| GET    | `/reviews`, `/reviews/:id`, `/reviews/gig/:gigId`, `/reviews/reviewer/:id`, `/reviews/reviewee/:id` | Public |
-| POST   | `/reviews` 🔒                         | Client or hired freelancer of a completed gig |
-| DELETE | `/reviews/:id` 🔒                     | Review author or admin               |
-| GET    | `/dashboard/client/:id` 🔒, `/dashboard/freelancer/:id` 🔒 | That user or admin |
-| GET    | `/dashboard/admin/stats` 🔒           | Admin                                |
+| Method | Path                                                                                                | Who                                           |
+| ------ | --------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| GET    | `/gigs?page&limit&status`                                                                           | Public                                        |
+| GET    | `/gigs/search?query&skills=a,b`                                                                     | Public                                        |
+| GET    | `/gigs/:id`, `/gigs/client/:clientId`                                                               | Public                                        |
+| POST   | `/gigs` 🔒                                                                                          | Clients, startups, admins                     |
+| PUT    | `/gigs/:id` 🔒, DELETE `/gigs/:id` 🔒                                                               | Gig owner or admin                            |
+| POST   | `/proposals` 🔒                                                                                     | Any user except the gig owner                 |
+| GET    | `/proposals/gig/:gigId` 🔒                                                                          | Gig owner or admin                            |
+| GET    | `/proposals/freelancer/:id` 🔒                                                                      | That freelancer or admin                      |
+| GET    | `/proposals/:id` 🔒                                                                                 | Author, gig owner or admin                    |
+| PUT    | `/proposals/:id` 🔒                                                                                 | Author edits/withdraws; owner accepts/rejects |
+| DELETE | `/proposals/:id` 🔒                                                                                 | Author or admin                               |
+| GET    | `/reviews`, `/reviews/:id`, `/reviews/gig/:gigId`, `/reviews/reviewer/:id`, `/reviews/reviewee/:id` | Public                                        |
+| POST   | `/reviews` 🔒                                                                                       | Client or hired freelancer of a completed gig |
+| DELETE | `/reviews/:id` 🔒                                                                                   | Review author or admin                        |
+| GET    | `/dashboard/client/:id` 🔒, `/dashboard/freelancer/:id` 🔒                                          | That user or admin                            |
+| GET    | `/dashboard/admin/stats` 🔒                                                                         | Admin                                         |
 
 </details>
 
 <details>
 <summary><strong>event-service</strong> (:4002)</summary>
 
-| Method | Path                                           | Who                         |
-| ------ | ---------------------------------------------- | --------------------------- |
+| Method | Path                                                | Who                                      |
+| ------ | --------------------------------------------------- | ---------------------------------------- |
 | GET    | `/events?eventType&upcoming&organizerId&page&limit` | Public (drafts only for their organizer) |
-| GET    | `/events/:id`                                  | Public if published         |
-| POST   | `/events` 🔒                                   | Any signed-in user          |
-| PUT    | `/events/:id` 🔒, DELETE `/events/:id` 🔒      | Organizer or admin          |
-| POST   | `/events/:id/register` 🔒                      | Signed-in user              |
-| POST   | `/events/:id/cancel` 🔒                        | The registered user         |
-| GET    | `/events/:id/attendees` 🔒                     | Organizer or admin          |
-| POST   | `/events/attendees/:attendeeId/mark-attendance` 🔒 | Organizer or admin      |
-| GET    | `/events/user/:userId` 🔒                      | That user or admin          |
+| GET    | `/events/:id`                                       | Public if published                      |
+| POST   | `/events` 🔒                                        | Any signed-in user                       |
+| PUT    | `/events/:id` 🔒, DELETE `/events/:id` 🔒           | Organizer or admin                       |
+| POST   | `/events/:id/register` 🔒                           | Signed-in user                           |
+| POST   | `/events/:id/cancel` 🔒                             | The registered user                      |
+| GET    | `/events/:id/attendees` 🔒                          | Organizer or admin                       |
+| POST   | `/events/attendees/:attendeeId/mark-attendance` 🔒  | Organizer or admin                       |
+| GET    | `/events/user/:userId` 🔒                           | That user or admin                       |
 
 </details>
+
+## Usage
+
+### Web app walkthrough
+
+1. Open http://localhost:3000 and **Get Started**. Sign up as a _Client_,
+   _Startup_ or _Freelancer_.
+2. **Clients and startups**: go to _Post a Project_ to create a gig. Then
+   open _Projects → View Proposals_ to accept or reject bids. Accepting a bid
+   moves the gig to _In progress_. When the work is done, mark the gig
+   completed and leave a review.
+3. **Freelancers**: browse _Find Work_, open a gig and submit a proposal.
+   Track it under _My Proposals_, where you can withdraw it while it is
+   pending.
+4. **Anyone**: create an event from _Create Event_, share it, and use
+   _Manage_ to check attendees in or export them to CSV. Others register
+   from the public _Events_ page. When an event is full, new registrations
+   join the waitlist.
+
+### API examples
+
+```bash
+# Sign up and log in
+curl -s -X POST localhost:4000/user/signup -H 'Content-Type: application/json' \
+  -d '{"name":"Ada","email":"ada@example.com","password":"password123","type":"client"}'
+# → 201 {"success":1,"user":{"id":"…","name":"Ada","email":"ada@example.com","type":"client",…}}
+
+TOKEN=$(curl -s -X POST localhost:4000/user/login -H 'Content-Type: application/json' \
+  -d '{"email":"ada@example.com","password":"password123"}' | jq -r .token)
+
+# Post a gig (clientId comes from the token)
+curl -s -X POST localhost:4001/gigs -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Build a landing page","description":"Responsive marketing page in Next.js.","budget":500,"requiredSkills":["react"]}'
+# → 201 {"success":true,"data":{"id":"…","status":"open","budget":500,…}}
+
+# Search gigs (public)
+curl -s 'localhost:4001/gigs/search?query=landing&skills=react,nextjs'
+# → {"success":true,"data":[…],"pagination":{"total":1,"page":1,"limit":10,"pages":1}}
+
+# Create an event and register for it
+EVENT=$(curl -s -X POST localhost:4002/events -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Hack Night","description":"Hacking on open source together","startDateTime":"2030-01-20T18:00:00Z","eventType":"HACKATHON","maxAttendees":50}' \
+  | jq -r .event.id)
+curl -s -X POST localhost:4002/events/$EVENT/register -H "Authorization: Bearer $TOKEN"
+# → {"success":true,"message":"SUCCESSFULLY_REGISTERED","attendee":{…}}
+```
+
+Errors share one shape:
+
+```json
+{
+  "success": false,
+  "message": "VALIDATION_ERROR",
+  "errors": [{ "path": "title", "message": "Title must be at least 5 characters" }]
+}
+```
+
+Common codes: `AUTHENTICATION_REQUIRED` / `INVALID_TOKEN` (401),
+`FORBIDDEN` / `NOT_GIG_OWNER` / `NOT_EVENT_ORGANIZER` (403), `*_NOT_FOUND`
+(404), `USER_EXISTS` / `ALREADY_APPLIED` / `ALREADY_REGISTERED` (409).
 
 ## Testing
 
 - **Backends:** Jest + Supertest exercise each service's real Express app,
   routing, validation, auth and business rules against in-memory
   repositories, so no database is needed (`npm test` in each package).
-- **Frontend:** Vitest unit tests cover the API client, auth storage and
-  dashboard helpers.
+- **Frontend:** Vitest and Testing Library tests cover the API client
+  (response shapes, auth headers, network and validation errors), auth
+  storage, the session-restoring `AuthProvider`, dashboard helpers and
+  formatting utilities.
+
+```bash
+npm test                                   # everything
+npm --prefix packages/freelance-service test -- --coverage
+npm --prefix packages/frontend run test:watch
+```
+
+**Lint and format:** ESLint 9 flat configs (typescript-eslint for the
+backends, `eslint-config-next` for the frontend) and a shared Prettier
+config. Run `npm run lint` and `npm run format:check` from the root.
 
 ## Deployment
 
@@ -308,6 +417,30 @@ accounts cannot be created through sign-up.
         └── lib/                # API client, auth, contexts, helpers
 ```
 
+## Troubleshooting
+
+| Problem                                                                 | Fix                                                                                                                              |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| A service exits with `Missing required environment variable JWT_SECRET` | Copy `.env.example` to `.env` (in the service folder, or at the root for Compose) and set `JWT_SECRET`.                          |
+| Login works but the other services return `401 INVALID_TOKEN`           | Every backend must use the **same** `JWT_SECRET`.                                                                                |
+| The browser reports a CORS error                                        | Add the frontend's origin to `CORS_ORIGIN` on each backend (comma-separated for several).                                        |
+| The frontend calls the wrong API URL                                    | `NEXT_PUBLIC_*` values are baked in at build time, so rebuild the frontend after changing them.                                  |
+| `ECONNREFUSED 127.0.0.1:5432`                                           | Postgres isn't running, or `DB_HOST`/`DB_PORT` are wrong. With Compose, the database is exposed on host port **5433**.           |
+| `npm ci` fails in the frontend with peer-dependency errors              | Use `npm ci --legacy-peer-deps` (some UI libraries have not declared React 19 support yet).                                      |
+| `next start` warns about `output: standalone`                           | This is expected. The Docker image runs `node server.js` from `.next/standalone`, and `next start` still works for local checks. |
+| Registering for an event returns `EVENT_NOT_AVAILABLE`                  | The event is a draft or deactivated. Publish it from the management page.                                                        |
+
+## Known limitations
+
+- Community chat, groups and media sharing are a front-end demo with mock
+  data. Nothing is persisted or shared between users yet.
+- The schema is managed by TypeORM `synchronize`; there are no migrations.
+- Event capacity is checked with count-then-insert, so heavy concurrent
+  sign-ups could briefly exceed `maxAttendees`.
+- No password reset, email verification or OAuth sign-in yet.
+- Tokens live in `localStorage`. An httpOnly-cookie session would be more
+  resistant to XSS.
+
 ## Roadmap
 
 - Real-time community chat backend (Socket.IO or similar) to replace the
@@ -317,3 +450,19 @@ accounts cannot be created through sign-up.
   under concurrent sign-ups
 - Payments, event reminder emails and gig recommendations (bonus items from
   the original brief)
+
+## Contributing
+
+1. Create a feature branch from `dev`.
+2. Keep each service's layering (routes → services → repository) and add
+   tests next to the existing ones in `tests/`.
+3. Before opening a pull request, run from the root:
+   `npm run lint && npm run typecheck && npm test && npm run build`.
+4. Use [Conventional Commits](https://www.conventionalcommits.org/)
+   (`feat:`, `fix:`, `docs:` …).
+
+## License
+
+No license has been chosen yet, so all rights are reserved by default.
+Add a `LICENSE` file (for example, MIT) before accepting outside
+contributions or reusing the code elsewhere.
