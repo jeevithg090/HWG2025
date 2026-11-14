@@ -1,18 +1,17 @@
 # Stage 1: Build the application
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 ARG NEXT_PUBLIC_USER_SERVICE_URL
 ARG NEXT_PUBLIC_EVENT_SERVICE_URL
 ARG NEXT_PUBLIC_FREELANCE_SERVICE_URL
+ARG NEXT_PUBLIC_SITE_URL
 
 # Install dependencies only when needed
 WORKDIR /app
 COPY package.json package-lock.json ./
-# You might need to add other lock files like yarn.lock or pnpm-lock.yaml if you use them.
-# For npm, package-lock.json is sufficient.
 
-# Install dependencies 
-RUN npm i --legacy-peer-deps
+# Install exactly what package-lock.json specifies
+RUN npm ci --legacy-peer-deps
 
 # Copy the rest of your application code
 COPY . .
@@ -22,6 +21,8 @@ COPY . .
 ENV NEXT_PUBLIC_USER_SERVICE_URL=${NEXT_PUBLIC_USER_SERVICE_URL}
 ENV NEXT_PUBLIC_EVENT_SERVICE_URL=${NEXT_PUBLIC_EVENT_SERVICE_URL}
 ENV NEXT_PUBLIC_FREELANCE_SERVICE_URL=${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build the Next.js application
 # `output: "standalone"` in next.config.js is highly recommended for Docker
@@ -29,15 +30,15 @@ ENV NEXT_PUBLIC_FREELANCE_SERVICE_URL=${NEXT_PUBLIC_FREELANCE_SERVICE_URL}
 RUN npm run build
 
 # Stage 2: Create the production image
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
 # Set production environment
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 # Disable Next.js telemetry (optional, but good for production builds)
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create a non-root user and group for security
 RUN addgroup --system --gid 1001 nodejs
@@ -53,6 +54,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 
 # Expose the port Next.js runs on
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 EXPOSE 3000
 
 # Start the Next.js application
