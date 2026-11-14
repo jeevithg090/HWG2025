@@ -1,173 +1,192 @@
+import { AppError } from "../common/errors";
+import { AttendeeStatus } from "../enums/eventTypes";
+import { AuthUser, isAdmin } from "../middleware/auth";
 import { Event } from "../models/event";
 import { EventAttendee } from "../models/eventAttendee";
-import eventAttendeeRepository from "../repository/eventAttendeeRepository";
-import eventRepository from "../repository/eventRepository";
-import {
-  CreateEventInput,
-  RegisterEventInput,
-} from "../types/createEventTypes";
+import { Repositories } from "../repository/types";
+import { CreateEventInput, EventQuery, UpdateEventInput } from "../validations/eventValidation";
+
+export interface EventList {
+  events: Event[];
+  pagination: { total: number; page: number; limit: number; pages: number };
+}
+
+export interface RegistrationResult {
+  message: "SUCCESSFULLY_REGISTERED" | "ADDED_TO_WAITLIST";
+  attendee: EventAttendee;
+}
 
 export class EventService {
-  public async createEvent(eventData: CreateEventInput): Promise<Event> {
-    const newEvent = await eventRepository.save(eventData);
-    return newEvent;
+  constructor(private readonly repos: Repositories) {}
+
+  /**
+   * Public listing. Drafts and deactivated events are hidden unless the
+   * requester is listing their own events (or is an admin).
+   */
+  async list(query: EventQuery, viewer?: AuthUser): Promise<EventList> {
+    const { page, limit, upcoming, ...filter } = query;
+    const canSeeDrafts =
+      !!viewer && (isAdmin(viewer) || (!!filter.organizerId && filter.organizerId === viewer.id));
+
+    const [events, total] = await this.repos.events.find(
+      {
+        ...filter,
+        isActive: canSeeDrafts ? filter.isActive : true,
+        isPublished: canSeeDrafts ? filter.isPublished : true,
+        from: upcoming ? new Date() : undefined,
+      },
+      { skip: (page - 1) * limit, take: limit },
+    );
+    return { events, pagination: { total, page, limit, pages: Math.ceil(total / limit) } };
   }
 
-  public async updateEvent(
-    id: string,
-    eventData: Partial<CreateEventInput>
-  ): Promise<Event | null> {
-    const event = await eventRepository.findById(id);
-    if (!event) {
-      return null;
-    }
-
-    const updatedEvent = { ...event, ...eventData };
-    return eventRepository.save(updatedEvent);
+  async get(id: string, viewer?: AuthUser): Promise<Event> {
+    const event = await this.repos.events.findById(id);
+    const visible =
+      event && ((event.isPublished && event.isActive) || (viewer && this.canManage(viewer, event)));
+    if (!event || !visible) throw AppError.notFound("EVENT_NOT_FOUND");
+    return event;
   }
 
-  public async findEventById(id: string): Promise<Event | null> {
-    return eventRepository.findById(id);
-  }
-
-  public async findEvents(options: {
-    isActive?: boolean;
-    eventType?: string;
-    isPublished?: boolean;
-    page?: number;
-    limit?: number;
-  }): Promise<{ events: Event[]; total: number }> {
-    const { page = 1, limit = 10, ...filters } = options;
-    const skip = (page - 1) * limit;
-
-    const [events, total] = await eventRepository.findAll({
-      ...filters,
-      skip,
-      take: limit,
+  async create(user: AuthUser, input: CreateEventInput): Promise<Event> {
+    return this.repos.events.create({
+      ...input,
+      isPublished: input.isPublished ?? true,
+      organizerId: user.id,
+      currentAttendees: 0,
     });
-
-    return { events, total };
   }
 
-  public async findEventsByOrganizerId(organizerId: string): Promise<Event[]> {
-    return eventRepository.findByOrganizerId(organizerId);
+  async update(user: AuthUser, id: string, input: UpdateEventInput): Promise<Event> {
+    const event = await this.getManaged(user, id);
+    const merged = { ...event, ...input };
+    if (merged.endDateTime && merged.endDateTime < merged.startDateTime) {
+      throw AppError.badRequest("END_BEFORE_START");
+    }
+    if (merged.maxAttendees && merged.maxAttendees < event.currentAttendees) {
+      throw AppError.badRequest("CAPACITY_BELOW_REGISTRATIONS");
+    }
+    const updated = await this.repos.events.update(id, input);
+    if (!updated) throw AppError.notFound("EVENT_NOT_FOUND");
+    if (input.maxAttendees !== undefined) {
+      await this.promoteWaitlist(updated);
+      return (await this.repos.events.findById(id)) ?? updated;
+    }
+    return updated;
   }
 
-  public async deleteEvent(id: string): Promise<boolean> {
-    return eventRepository.deleteById(id);
+  async remove(user: AuthUser, id: string): Promise<void> {
+    await this.getManaged(user, id);
+    await this.repos.events.delete(id);
   }
 
-  // Event Attendee methods
-  public async registerForEvent(
-    eventId: string,
-    attendeeData: RegisterEventInput
-  ): Promise<{ success: boolean; message: string; attendee?: EventAttendee }> {
-    const event = await eventRepository.findById(eventId);
+  async register(user: AuthUser, eventId: string): Promise<RegistrationResult> {
+    const event = await this.repos.events.findById(eventId);
+    if (!event) throw AppError.notFound("EVENT_NOT_FOUND");
+    if (!event.isActive || !event.isPublished) throw AppError.badRequest("EVENT_NOT_AVAILABLE");
+    const endsAt = event.endDateTime ?? event.startDateTime;
+    if (endsAt.getTime() < Date.now()) throw AppError.badRequest("EVENT_ENDED");
 
-    if (!event) {
-      return { success: false, message: "EVENT_NOT_FOUND" };
+    const registered = await this.repos.attendees.countByStatus(eventId, AttendeeStatus.REGISTERED);
+    const status =
+      event.maxAttendees && registered >= event.maxAttendees
+        ? AttendeeStatus.WAITLISTED
+        : AttendeeStatus.REGISTERED;
+
+    const details = { status, userEmail: user.email, userName: user.name, hasAttended: false };
+    const existing = await this.repos.attendees.findOne(eventId, user.id);
+    let attendee: EventAttendee | null;
+    if (existing) {
+      if (existing.status !== AttendeeStatus.CANCELLED) {
+        throw AppError.conflict("ALREADY_REGISTERED");
+      }
+      // Re-registering after a cancellation reuses the existing row.
+      attendee = await this.repos.attendees.update(existing.id, details);
+    } else {
+      attendee = await this.repos.attendees.create({ ...details, eventId, userId: user.id });
     }
+    if (!attendee) throw AppError.notFound("REGISTRATION_NOT_FOUND");
 
-    if (!event.isActive || !event.isPublished) {
-      return { success: false, message: "EVENT_NOT_AVAILABLE" };
-    }
-
-    const existingRegistration =
-      await eventAttendeeRepository.findByUserIdAndEventId(
-        attendeeData.userId,
-        eventId
-      );
-
-    if (existingRegistration) {
-      return { success: false, message: "ALREADY_REGISTERED" };
-    }
-
-    if (event.maxAttendees && event.currentAttendees >= event.maxAttendees) {
-      // Add to waitlist
-      const attendee = await eventAttendeeRepository.save({
-        eventId,
-        userId: attendeeData.userId,
-        userEmail: attendeeData.userEmail,
-        userName: attendeeData.userName,
-        status: "WAITLISTED",
-      });
-
-      return {
-        success: true,
-        message: "ADDED_TO_WAITLIST",
-        attendee,
-      };
-    }
-
-    // Register user
-    const attendee = await eventAttendeeRepository.save({
-      eventId,
-      userId: attendeeData.userId,
-      userEmail: attendeeData.userEmail,
-      userName: attendeeData.userName,
-    });
-
-    // Increment attendee count
-    await eventRepository.save({
-      id: eventId,
-      currentAttendees: event.currentAttendees + 1,
-    });
-
+    await this.syncAttendeeCount(eventId);
     return {
-      success: true,
-      message: "SUCCESSFULLY_REGISTERED",
+      message:
+        status === AttendeeStatus.WAITLISTED ? "ADDED_TO_WAITLIST" : "SUCCESSFULLY_REGISTERED",
       attendee,
     };
   }
 
-  public async cancelRegistration(
-    eventId: string,
-    userId: string
-  ): Promise<{ success: boolean; message: string }> {
-    const registration = await eventAttendeeRepository.findByUserIdAndEventId(
-      userId,
-      eventId
-    );
-
-    if (!registration) {
-      return { success: false, message: "REGISTRATION_NOT_FOUND" };
+  async cancel(user: AuthUser, eventId: string): Promise<void> {
+    const event = await this.repos.events.findById(eventId);
+    if (!event) throw AppError.notFound("EVENT_NOT_FOUND");
+    const registration = await this.repos.attendees.findOne(eventId, user.id);
+    if (!registration || registration.status === AttendeeStatus.CANCELLED) {
+      throw AppError.notFound("REGISTRATION_NOT_FOUND");
     }
 
-    const event = await eventRepository.findById(eventId);
-
-    if (!event) {
-      return { success: false, message: "EVENT_NOT_FOUND" };
+    await this.repos.attendees.update(registration.id, { status: AttendeeStatus.CANCELLED });
+    if (registration.status === AttendeeStatus.REGISTERED) {
+      await this.promoteWaitlist(event);
     }
-
-    await eventAttendeeRepository.updateStatus(registration.id, "CANCELLED");
-
-    if (registration.status === "REGISTERED") {
-      await eventRepository.save({
-        id: eventId,
-        currentAttendees: Math.max(0, event.currentAttendees - 1),
-      });
-
-      // TODO: Implement waitlist promotion logic
-    }
-
-    return {
-      success: true,
-      message: "REGISTRATION_CANCELLED",
-    };
   }
 
-  public async getEventAttendees(eventId: string): Promise<EventAttendee[]> {
-    return eventAttendeeRepository.findByEventId(eventId);
+  async attendees(user: AuthUser, eventId: string): Promise<EventAttendee[]> {
+    await this.getManaged(user, eventId);
+    return this.repos.attendees.findByEvent(eventId);
   }
 
-  public async getUserEvents(userId: string): Promise<EventAttendee[]> {
-    return eventAttendeeRepository.findByUserId(userId);
-  }
-
-  public async markAttendance(
+  async markAttendance(
+    user: AuthUser,
     attendeeId: string,
-    hasAttended: boolean
-  ): Promise<EventAttendee | null> {
-    return eventAttendeeRepository.markAttended(attendeeId, hasAttended);
+    hasAttended: boolean,
+  ): Promise<EventAttendee> {
+    const attendee = await this.repos.attendees.findById(attendeeId);
+    if (!attendee) throw AppError.notFound("ATTENDEE_NOT_FOUND");
+    await this.getManaged(user, attendee.eventId);
+    if (attendee.status !== AttendeeStatus.REGISTERED) {
+      throw AppError.badRequest("ATTENDEE_NOT_REGISTERED");
+    }
+    const updated = await this.repos.attendees.update(attendeeId, { hasAttended });
+    if (!updated) throw AppError.notFound("ATTENDEE_NOT_FOUND");
+    return updated;
+  }
+
+  async userRegistrations(user: AuthUser, userId: string): Promise<EventAttendee[]> {
+    if (user.id !== userId && !isAdmin(user)) throw AppError.forbidden();
+    return this.repos.attendees.findByUser(userId);
+  }
+
+  /** Moves waitlisted attendees into free seats (first come, first served). */
+  private async promoteWaitlist(event: Event): Promise<void> {
+    const registered = await this.repos.attendees.countByStatus(
+      event.id,
+      AttendeeStatus.REGISTERED,
+    );
+    const freeSeats = event.maxAttendees ? event.maxAttendees - registered : Infinity;
+    if (freeSeats > 0) {
+      const waitlist = await this.repos.attendees.findByEvent(event.id, AttendeeStatus.WAITLISTED);
+      for (const attendee of waitlist.slice(0, freeSeats)) {
+        await this.repos.attendees.update(attendee.id, { status: AttendeeStatus.REGISTERED });
+      }
+    }
+    await this.syncAttendeeCount(event.id);
+  }
+
+  private async syncAttendeeCount(eventId: string): Promise<void> {
+    const currentAttendees = await this.repos.attendees.countByStatus(
+      eventId,
+      AttendeeStatus.REGISTERED,
+    );
+    await this.repos.events.update(eventId, { currentAttendees });
+  }
+
+  private canManage(user: AuthUser, event: Event) {
+    return event.organizerId === user.id || isAdmin(user);
+  }
+
+  private async getManaged(user: AuthUser, id: string): Promise<Event> {
+    const event = await this.repos.events.findById(id);
+    if (!event) throw AppError.notFound("EVENT_NOT_FOUND");
+    if (!this.canManage(user, event)) throw AppError.forbidden("NOT_EVENT_ORGANIZER");
+    return event;
   }
 }
