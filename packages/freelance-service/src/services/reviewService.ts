@@ -1,91 +1,62 @@
-import { ReviewRepository } from "../repository/reviewRepository";
-import { GigRepository } from "../repository/gigRepository";
+import { AppError } from "../common/errors";
+import { GigStatus, ProposalStatus } from "../enums/gigStatus";
+import { AuthUser, isAdmin } from "../middleware/auth";
 import { Review } from "../models/review";
-import { CreateReviewSchema } from "../validations/reviewValidation";
-import logger from "../common/logger";
-import { Transactional } from "typeorm-transactional";
-import { z } from "zod";
-import { GigStatus } from "../enums/gigStatus";
+import { Repositories, ReviewFilter } from "../repository/types";
+import { CreateReviewInput, Pagination } from "../validations/schemas";
+import { average, paginate, Paginated, toPage } from "./pagination";
 
 export class ReviewService {
-  private reviewRepository: ReviewRepository;
-  private gigRepository: GigRepository;
+  constructor(private readonly repos: Repositories) {}
 
-  constructor() {
-    this.reviewRepository = new ReviewRepository();
-    this.gigRepository = new GigRepository();
+  async list(filter: ReviewFilter, pagination: Pagination): Promise<Paginated<Review>> {
+    return paginate(await this.repos.reviews.find(filter, toPage(pagination)), pagination);
   }
 
-  async getAllReviews(
-    filter?: Partial<Review>,
-    page = 1,
-    limit = 10
-  ): Promise<Review[]> {
-    const skip = (page - 1) * limit;
-    return this.reviewRepository.findAll(filter, skip, limit);
+  async listBy(filter: ReviewFilter): Promise<Review[]> {
+    const [reviews] = await this.repos.reviews.find(filter);
+    return reviews;
   }
 
-  async getReviewById(id: string): Promise<Review | null> {
-    return this.reviewRepository.findById(id);
+  async get(id: string): Promise<Review> {
+    const review = await this.repos.reviews.findById(id);
+    if (!review) throw AppError.notFound("REVIEW_NOT_FOUND");
+    return review;
   }
 
-  @Transactional()
-  async createReview(
-    reviewData: z.infer<typeof CreateReviewSchema>
-  ): Promise<Review> {
-    try {
-      // Validate the input data
-      CreateReviewSchema.parse(reviewData);
+  async averageRating(userId: string): Promise<number | null> {
+    const reviews = await this.listBy({ revieweeId: userId });
+    return average(reviews.map((r) => r.rating));
+  }
 
-      // Check if the gig exists and is completed
-      const gig = await this.gigRepository.findById(reviewData.gigId);
-      if (!gig) {
-        throw new Error("Gig not found");
-      }
-      if (gig.status !== GigStatus.COMPLETED) {
-        throw new Error("Can only review completed gigs");
-      }
+  /**
+   * Only the two parties of a completed gig — the client and the freelancer
+   * whose proposal was accepted — may review each other, once each.
+   */
+  async create(user: AuthUser, input: CreateReviewInput): Promise<Review> {
+    const gig = await this.repos.gigs.findById(input.gigId);
+    if (!gig) throw AppError.notFound("GIG_NOT_FOUND");
+    if (gig.status !== GigStatus.COMPLETED) throw AppError.badRequest("GIG_NOT_COMPLETED");
+    if (input.revieweeId === user.id) throw AppError.badRequest("CANNOT_REVIEW_SELF");
 
-      // Check if the user has already reviewed this gig
-      const existingReview = await this.reviewRepository.findAll({
-        gigId: reviewData.gigId,
-        reviewerId: reviewData.reviewerId,
-      });
-
-      if (existingReview.length > 0) {
-        throw new Error("You have already reviewed this gig");
-      }
-
-      return await this.reviewRepository.createReview(reviewData);
-    } catch (error) {
-      logger.error(`Error creating review: ${error}`);
-      throw error;
+    const [proposals] = await this.repos.proposals.find({ gigId: gig.id });
+    const hired = proposals.find((p) => p.status === ProposalStatus.ACCEPTED);
+    const parties = new Set([gig.clientId, hired?.freelancerId].filter(Boolean));
+    if (!parties.has(user.id) || !parties.has(input.revieweeId)) {
+      throw AppError.forbidden("NOT_GIG_PARTICIPANT");
     }
+
+    const [existing] = await this.repos.reviews.find({ gigId: gig.id, reviewerId: user.id });
+    if (existing.length > 0) throw AppError.conflict("ALREADY_REVIEWED");
+
+    return this.repos.reviews.create({ ...input, reviewerId: user.id });
   }
 
-  @Transactional()
-  async deleteReview(id: string): Promise<boolean> {
-    try {
-      return await this.reviewRepository.deleteReview(id);
-    } catch (error) {
-      logger.error(`Error deleting review ${id}: ${error}`);
-      throw error;
+  async remove(user: AuthUser, id: string): Promise<void> {
+    const review = await this.get(id);
+    if (review.reviewerId !== user.id && !isAdmin(user)) {
+      throw AppError.forbidden("NOT_REVIEW_AUTHOR");
     }
-  }
-
-  async getReviewsByReviewerId(reviewerId: string): Promise<Review[]> {
-    return this.reviewRepository.findByReviewerId(reviewerId);
-  }
-
-  async getReviewsByRevieweeId(revieweeId: string): Promise<Review[]> {
-    return this.reviewRepository.findByRevieweeId(revieweeId);
-  }
-
-  async getReviewsByGigId(gigId: string): Promise<Review[]> {
-    return this.reviewRepository.findByGigId(gigId);
-  }
-
-  async getUserAverageRating(userId: string): Promise<number> {
-    return this.reviewRepository.getAverageRating(userId);
+    await this.repos.reviews.softDelete(id);
   }
 }

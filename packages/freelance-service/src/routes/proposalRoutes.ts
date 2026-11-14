@@ -1,169 +1,55 @@
-import express, { Request, Response } from "express";
+import { Router } from "express";
+import { currentUser, requireAuth } from "../middleware/auth";
 import { ProposalService } from "../services/proposalService";
 import {
   CreateProposalSchema,
+  IdParamSchema,
+  PaginationSchema,
   UpdateProposalSchema,
-} from "../validations/proposalValidation";
-import { responseMapping } from "../constants/responseMapping";
-import logger from "../common/logger";
+} from "../validations/schemas";
 
-const router = express.Router();
-const proposalService = new ProposalService();
+/** Proposals contain private bids, so every route requires authentication. */
+export const createProposalRouter = (proposals: ProposalService) => {
+  const router = Router();
+  router.use(requireAuth);
 
-// Get all proposals with pagination
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const proposals = await proposalService.getAllProposals({}, page, limit);
-    res
-      .status(responseMapping.SUCCESS.code)
-      .json({ success: true, data: proposals });
-  } catch (error: any) {
-    logger.error(`Error fetching proposals: ${error.message}`);
-    res.status(responseMapping.SERVER_ERROR.code).json({
-      success: false,
-      message: responseMapping.SERVER_ERROR.message,
-    });
-  }
-});
+  router.get("/", async (req, res) => {
+    const pagination = PaginationSchema.parse(req.query);
+    const { items, pagination: meta } = await proposals.listAll(currentUser(req), pagination);
+    res.json({ success: true, data: items, pagination: meta });
+  });
 
-// Get a specific proposal by ID
-router.get("/:id", async (req: Request, res: Response) => {
-  try {
-    const proposal = await proposalService.getProposalById(req.params.id);
-    if (!proposal) {
-      return res.status(responseMapping.NOT_FOUND.code).json({
-        success: false,
-        message: "Proposal not found",
-      });
-    }
-    res
-      .status(responseMapping.SUCCESS.code)
-      .json({ success: true, data: proposal });
-  } catch (error: any) {
-    logger.error(`Error fetching proposal: ${error.message}`);
-    res.status(responseMapping.SERVER_ERROR.code).json({
-      success: false,
-      message: responseMapping.SERVER_ERROR.message,
-    });
-  }
-});
+  router.get("/gig/:gigId", async (req, res) => {
+    const { id } = IdParamSchema.parse({ id: req.params.gigId });
+    res.json({ success: true, data: await proposals.listForGig(currentUser(req), id) });
+  });
 
-// Create a new proposal
-router.post("/", async (req: Request, res: Response) => {
-  try {
-    const validatedData = CreateProposalSchema.parse(req.body);
-    const proposal = await proposalService.createProposal(validatedData);
-    res
-      .status(responseMapping.CREATED.code)
-      .json({ success: true, data: proposal });
-  } catch (error: any) {
-    logger.error(`Error creating proposal: ${error.message}`);
-    if (error.name === "ZodError") {
-      return res.status(responseMapping.VALIDATION_ERROR.code).json({
-        success: false,
-        message: "Validation error",
-        errors: error.errors,
-      });
-    }
-    res.status(responseMapping.SERVER_ERROR.code).json({
-      success: false,
-      message: responseMapping.SERVER_ERROR.message,
-    });
-  }
-});
+  router.get("/freelancer/:freelancerId", async (req, res) => {
+    const { id } = IdParamSchema.parse({ id: req.params.freelancerId });
+    res.json({ success: true, data: await proposals.listForFreelancer(currentUser(req), id) });
+  });
 
-// Update a proposal
-router.put("/:id", async (req: Request, res: Response) => {
-  try {
-    const validatedData = UpdateProposalSchema.parse(req.body);
-    const updatedProposal = await proposalService.updateProposal(
-      req.params.id,
-      validatedData
-    );
-    if (!updatedProposal) {
-      return res.status(responseMapping.NOT_FOUND.code).json({
-        success: false,
-        message: "Proposal not found",
-      });
-    }
-    res
-      .status(responseMapping.SUCCESS.code)
-      .json({ success: true, data: updatedProposal });
-  } catch (error: any) {
-    logger.error(`Error updating proposal: ${error.message}`);
-    if (error.name === "ZodError") {
-      return res.status(responseMapping.VALIDATION_ERROR.code).json({
-        success: false,
-        message: "Validation error",
-        errors: error.errors,
-      });
-    }
-    res.status(responseMapping.SERVER_ERROR.code).json({
-      success: false,
-      message: responseMapping.SERVER_ERROR.message,
-    });
-  }
-});
+  router.get("/:id", async (req, res) => {
+    const { id } = IdParamSchema.parse(req.params);
+    res.json({ success: true, data: await proposals.get(currentUser(req), id) });
+  });
 
-// Delete a proposal
-router.delete("/:id", async (req: Request, res: Response) => {
-  try {
-    const deleted = await proposalService.deleteProposal(req.params.id);
-    if (!deleted) {
-      return res.status(responseMapping.NOT_FOUND.code).json({
-        success: false,
-        message: "Proposal not found",
-      });
-    }
-    res.status(responseMapping.SUCCESS.code).json({
-      success: true,
-      message: "Proposal deleted successfully",
-    });
-  } catch (error: any) {
-    logger.error(`Error deleting proposal: ${error.message}`);
-    res.status(responseMapping.SERVER_ERROR.code).json({
-      success: false,
-      message: responseMapping.SERVER_ERROR.message,
-    });
-  }
-});
+  router.post("/", async (req, res) => {
+    const proposal = await proposals.create(currentUser(req), CreateProposalSchema.parse(req.body));
+    res.status(201).json({ success: true, data: proposal });
+  });
 
-// Get proposals by gig ID
-router.get("/gig/:gigId", async (req: Request, res: Response) => {
-  try {
-    const proposals = await proposalService.getProposalsByGigId(
-      req.params.gigId
-    );
-    res
-      .status(responseMapping.SUCCESS.code)
-      .json({ success: true, data: proposals });
-  } catch (error: any) {
-    logger.error(`Error fetching gig proposals: ${error.message}`);
-    res.status(responseMapping.SERVER_ERROR.code).json({
-      success: false,
-      message: responseMapping.SERVER_ERROR.message,
-    });
-  }
-});
+  router.put("/:id", async (req, res) => {
+    const { id } = IdParamSchema.parse(req.params);
+    const input = UpdateProposalSchema.parse(req.body);
+    res.json({ success: true, data: await proposals.update(currentUser(req), id, input) });
+  });
 
-// Get proposals by freelancer ID
-router.get("/freelancer/:freelancerId", async (req: Request, res: Response) => {
-  try {
-    const proposals = await proposalService.getProposalsByFreelancerId(
-      req.params.freelancerId
-    );
-    res
-      .status(responseMapping.SUCCESS.code)
-      .json({ success: true, data: proposals });
-  } catch (error: any) {
-    logger.error(`Error fetching freelancer proposals: ${error.message}`);
-    res.status(responseMapping.SERVER_ERROR.code).json({
-      success: false,
-      message: responseMapping.SERVER_ERROR.message,
-    });
-  }
-});
+  router.delete("/:id", async (req, res) => {
+    const { id } = IdParamSchema.parse(req.params);
+    await proposals.remove(currentUser(req), id);
+    res.json({ success: true, message: "PROPOSAL_DELETED" });
+  });
 
-export const proposalRoutes = router;
+  return router;
+};

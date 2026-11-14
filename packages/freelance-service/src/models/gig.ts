@@ -1,14 +1,6 @@
-// src/models/gig.ts
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  OneToMany,
-  JoinColumn,
-} from "typeorm";
-import Model from "./base";
+import { Column, Entity, Index, OneToMany } from "typeorm";
 import { GigStatus } from "../enums/gigStatus";
+import Model, { decimalTransformer } from "./base";
 import { Proposal } from "./proposal";
 import { Review } from "./review";
 
@@ -20,34 +12,39 @@ export class Gig extends Model {
   @Column("text")
   description!: string;
 
+  @Index()
   @Column("uuid")
   clientId!: string;
 
-  @Column("decimal", { precision: 10, scale: 2, nullable: true })
-  budget?: number;
+  @Column("decimal", {
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: decimalTransformer,
+  })
+  budget?: number | null;
 
   @Column("text", { array: true, nullable: true })
-  requiredSkills?: string[];
+  requiredSkills?: string[] | null;
 
-  @Column({
-    type: "enum",
-    enum: GigStatus,
-    default: GigStatus.OPEN,
-  })
+  @Column({ type: "enum", enum: GigStatus, default: GigStatus.OPEN })
   status!: GigStatus;
 
-  @Column({ nullable: true })
-  deadline?: Date;
+  @Column({ type: "timestamptz", nullable: true })
+  deadline?: Date | null;
 
   @Column("text", { nullable: true })
-  attachmentUrl?: string;
+  attachmentUrl?: string | null;
 
   @Column({ default: true })
   isActive!: boolean;
 
   @OneToMany(() => Proposal, (proposal) => proposal.gig)
-  proposals!: Proposal[];
+  proposals?: Proposal[];
+
+  /** Populated by queries via loadRelationCountAndMap; not a column. */
+  proposalCount?: number;
 
   @OneToMany(() => Review, (review) => review.gig)
-  reviews!: Review[];
+  reviews?: Review[];
 }

@@ -1,82 +1,63 @@
-import { GigRepository } from "../repository/gigRepository";
+import { AppError } from "../common/errors";
+import { AuthUser, isAdmin } from "../middleware/auth";
 import { Gig } from "../models/gig";
-import { CreateGigSchema, UpdateGigSchema } from "../validations/gigValidation";
-import logger from "../common/logger";
-import { Transactional } from "typeorm-transactional";
-import { z } from "zod";
+import { GigFilter, GigRepository } from "../repository/types";
+import { CreateGigInput, Pagination, UpdateGigInput } from "../validations/schemas";
+import { paginate, Paginated, toPage } from "./pagination";
+
+/** Account types allowed to post gigs. */
+const GIG_POSTER_TYPES = new Set(["client", "startup", "admin"]);
 
 export class GigService {
-  private gigRepository: GigRepository;
+  constructor(private readonly gigs: GigRepository) {}
 
-  constructor() {
-    this.gigRepository = new GigRepository();
+  async list(filter: GigFilter, pagination: Pagination): Promise<Paginated<Gig>> {
+    return paginate(await this.gigs.find(filter, toPage(pagination)), pagination);
   }
 
-  async getAllGigs(
-    filter?: Partial<Gig>,
-    page = 1,
-    limit = 10
-  ): Promise<Gig[]> {
-    const skip = (page - 1) * limit;
-    return this.gigRepository.findAll(filter, skip, limit);
+  async listByClient(clientId: string): Promise<Gig[]> {
+    const [gigs] = await this.gigs.find({ clientId, includeInactive: true });
+    return gigs;
   }
 
-  async getGigById(id: string): Promise<Gig | null> {
-    return this.gigRepository.findById(id);
+  async get(id: string): Promise<Gig> {
+    const gig = await this.gigs.findById(id);
+    if (!gig) throw AppError.notFound("GIG_NOT_FOUND");
+    return gig;
   }
 
-  @Transactional()
-  async createGig(gigData: z.infer<typeof CreateGigSchema>): Promise<Gig> {
-    try {
-      // Validate the input data
-      CreateGigSchema.parse(gigData);
-      // Convert deadline from string to Date if present
-      const gigDataToSave = {
-        ...gigData,
-        deadline: gigData.deadline ? new Date(gigData.deadline) : undefined,
-      };
-      return await this.gigRepository.createGig(gigDataToSave);
-    } catch (error) {
-      logger.error(`Error creating gig: ${error}`);
-      throw error;
+  async create(user: AuthUser, input: CreateGigInput): Promise<Gig> {
+    if (!GIG_POSTER_TYPES.has(user.type)) {
+      throw AppError.forbidden("GIG_CREATE_FORBIDDEN");
     }
+    return this.gigs.create({
+      ...input,
+      clientId: user.id,
+      deadline: input.deadline ? new Date(input.deadline) : undefined,
+    });
   }
 
-  @Transactional()
-  async updateGig(
-    id: string,
-    gigData: z.infer<typeof UpdateGigSchema>
-  ): Promise<Gig | null> {
-    try {
-      // Validate the input data
-      UpdateGigSchema.parse(gigData);
-      // Convert deadline from string to Date if present
-      const gigDataToUpdate = {
-        ...gigData,
-        deadline: gigData.deadline ? new Date(gigData.deadline) : undefined,
-      };
-      return await this.gigRepository.updateGig(id, gigDataToUpdate);
-    } catch (error) {
-      logger.error(`Error updating gig ${id}: ${error}`);
-      throw error;
+  async update(user: AuthUser, id: string, input: UpdateGigInput): Promise<Gig> {
+    await this.getOwned(user, id);
+    const { deadline, ...rest } = input;
+    const changes: Partial<Gig> = { ...rest };
+    if (deadline !== undefined) changes.deadline = new Date(deadline);
+    const updated = await this.gigs.update(id, changes);
+    if (!updated) throw AppError.notFound("GIG_NOT_FOUND");
+    return updated;
+  }
+
+  async remove(user: AuthUser, id: string): Promise<void> {
+    await this.getOwned(user, id);
+    await this.gigs.softDelete(id);
+  }
+
+  /** Loads a gig and asserts the user owns it (admins may act on any gig). */
+  async getOwned(user: AuthUser, id: string): Promise<Gig> {
+    const gig = await this.get(id);
+    if (gig.clientId !== user.id && !isAdmin(user)) {
+      throw AppError.forbidden("NOT_GIG_OWNER");
     }
-  }
-
-  @Transactional()
-  async deleteGig(id: string): Promise<boolean> {
-    try {
-      return await this.gigRepository.deleteGig(id);
-    } catch (error) {
-      logger.error(`Error deleting gig ${id}: ${error}`);
-      throw error;
-    }
-  }
-
-  async getGigsByClientId(clientId: string): Promise<Gig[]> {
-    return this.gigRepository.findByClientId(clientId);
-  }
-
-  async searchGigs(query: string, skills?: string[]): Promise<Gig[]> {
-    return this.gigRepository.searchGigs(query, skills);
+    return gig;
   }
 }
