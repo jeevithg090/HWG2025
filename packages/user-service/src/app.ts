@@ -1,34 +1,41 @@
-import express from "express";
-import userRouter from "./routes/userRoutes";
-import verifyToken from "./middleware/auth";
-import authRouter from "./routes/authRoutes";
-import cors from "cors"; // Import the cors middleware
+import cors from "cors";
+import express, { Application } from "express";
+import helmet from "helmet";
+import config from "./config/config";
+import { errorHandler, notFoundHandler } from "./common/errors";
+import { createAuthRouter } from "./routes/authRoutes";
+import { createUserRouter } from "./routes/userRoutes";
+import { UserService } from "./services/userService";
 
-const app = express();
+export interface AppDependencies {
+  userService?: UserService;
+}
 
-const corsOptions = {
-  origin: [
-    "http://localhost:3000", // Your local frontend URL
-    // If you deploy your frontend, you'll add its production URL(s) here too
-    // e.g., 'https://your-production-frontend.com'
-  ],
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE", // Allow these HTTP methods
-  credentials: true, // Allow cookies to be sent
-  optionsSuccessStatus: 204, // For preflight requests
+export const createApp = ({ userService = new UserService() }: AppDependencies = {}): Application => {
+  const app = express();
+
+  app.disable("x-powered-by");
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: config.corsOrigins,
+      methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
+      credentials: true,
+    }),
+  );
+  app.use(express.json({ limit: "100kb" }));
+
+  const health = (_req: express.Request, res: express.Response) => {
+    res.status(200).json({ success: 1, status: "UP", service: "user-service" });
+  };
+  app.get("/health", health);
+  app.get("/healthcheck", health);
+
+  app.use("/user", createUserRouter(userService));
+  app.use("/auth", createAuthRouter());
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+
+  return app;
 };
-app.use(cors(corsOptions));
-
-app.use(express.json());
-app.use(express.urlencoded());
-
-app.use(verifyToken);
-
-app.use("/user", userRouter);
-app.use("/auth", authRouter);
-app.get("/healthcheck", (_, res) => {
-  res.status(200);
-  res.json({ mesage: "Server is running on desired port", success: 1 });
-  res.send();
-});
-
-export default app;

@@ -1,16 +1,13 @@
-import express from "express";
-import { UserService } from "../services/userService";
-const authRouter = express.Router();
+import { Router } from "express";
+import { currentUser, requireAuth } from "../middleware/auth";
 
-const userService: UserService = new UserService();
+/** Lets other services or clients check a token and read the identity inside it. */
+export const createAuthRouter = () => {
+  const router = Router();
 
-authRouter.get("/verify-token", async (req, res) => {
-  const user = (req as any).user;
-  res.status(200);
-  res.send({
-    user: user,
-    successs: 1,
+  router.get("/verify-token", requireAuth, (req, res) => {
+    res.status(200).json({ success: 1, user: currentUser(req) });
   });
-});
 
-export default authRouter;
+  return router;
+};

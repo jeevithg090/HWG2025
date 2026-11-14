@@ -1,46 +1,38 @@
-import { Repository } from "typeorm";
-import DatabaseConnection from "../database/database";
+import { dataSource } from "../database/database";
 import { User } from "../models/user";
 
-class UserRepository {
-  private static _instance: UserRepository;
-  private repository!: Repository<User>;
-  private initialized = false;
-
-  public static getInstance(): UserRepository {
-    if (!UserRepository._instance) {
-      UserRepository._instance = new UserRepository();
-    }
-    return UserRepository._instance;
-  }
-
-  private async initRepository() {
-    if (!this.initialized) {
-      const dataSource = await DatabaseConnection.getInstance().getDataSource();
-      this.repository = dataSource.getRepository(User);
-      this.initialized = true;
-    }
-  }
-
-  public async save(user: Partial<User>): Promise<User> {
-    await this.initRepository();
-    return this.repository.save(user);
-  }
-
-  public async findById(id: string): Promise<User | null> {
-    await this.initRepository();
-    return this.repository.findOneBy({ id });
-  }
-
-  public async findByEmail(email: string): Promise<User | null> {
-    await this.initRepository();
-    return this.repository.findOneBy({ email });
-  }
-
-  public async findAll(): Promise<User[]> {
-    await this.initRepository();
-    return this.repository.find();
-  }
+export interface UserRepository {
+  create(user: Partial<User>): Promise<User>;
+  findById(id: string): Promise<User | null>;
+  findByEmail(email: string): Promise<User | null>;
+  /** Same as findByEmail but includes the (normally hidden) password hash. */
+  findByEmailWithPassword(email: string): Promise<User | null>;
+  update(id: string, changes: Partial<User>): Promise<User | null>;
 }
 
-export default UserRepository.getInstance();
+const repo = () => dataSource.getRepository(User);
+
+export const typeormUserRepository: UserRepository = {
+  async create(user) {
+    const saved = await repo().save(repo().create(user));
+    delete saved.password;
+    return saved;
+  },
+  findById(id) {
+    return repo().findOneBy({ id });
+  },
+  findByEmail(email) {
+    return repo().findOneBy({ email });
+  },
+  findByEmailWithPassword(email) {
+    return repo()
+      .createQueryBuilder("user")
+      .addSelect("user.password")
+      .where("user.email = :email", { email })
+      .getOne();
+  },
+  async update(id, changes) {
+    await repo().update(id, changes);
+    return repo().findOneBy({ id });
+  },
+};

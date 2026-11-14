@@ -1,7 +1,6 @@
 import { Column, Entity } from "typeorm";
 import { UserTypes } from "../enums/userTypes";
 import Model from "./base";
-import { UserRoles } from "../enums/userRoles";
 
 @Entity()
 export class User extends Model {
@@ -11,13 +10,14 @@ export class User extends Model {
   @Column({ unique: true })
   email!: string;
 
-  @Column({ nullable: true }) // Password may be null for OAuth users
+  // Never selected by default so password hashes cannot leak through generic queries.
+  @Column({ nullable: true, select: false })
   password?: string;
 
-  @Column({ default: "local" }) // 'local', 'google', etc.
+  @Column({ default: "local" })
   provider!: string;
 
-  @Column({ nullable: true }) // Provider-specific user ID
+  @Column({ nullable: true })
   providerId?: string;
 
   @Column({
@@ -27,10 +27,10 @@ export class User extends Model {
   })
   type!: UserTypes;
 
-  @Column({ type: "simple-array", nullable: true, default: [] })
+  @Column({ type: "simple-array", nullable: true })
   roles?: string[];
 
-  @Column({ nullable: true })
+  @Column({ type: "text", nullable: true })
   bio?: string;
 
   @Column("text", { array: true, nullable: true })
